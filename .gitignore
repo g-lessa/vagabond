@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.vagabond-config.json
+.DS_Store
+*.log
+*.mp4

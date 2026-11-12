@@ -1,0 +1,227 @@
+import type { CustomBounds, MapPreset } from './types.js';
+import { WORLD_DIAGONAL_METERS, calculateBoundsDiagonalMeters } from './scoring.js';
+
+export const CUSTOM_AREA_PRESET_ID = 'custom';
+
+export const CURATED_MAP_PRESETS: MapPreset[] = [
+  {
+    id: 'world',
+    name: 'World',
+    category: 'global',
+    emoji: '🌍',
+    description: 'Balanced street-level drops across every inhabited continent.',
+    diagonalMeters: WORLD_DIAGONAL_METERS,
+    bounds: { north: 72, south: -56, east: 180, west: -180 },
+  },
+  {
+    id: 'europe',
+    name: 'Europe',
+    category: 'continent',
+    emoji: '🏰',
+    description: 'From Lisbon to Tallinn, Iceland to Athens.',
+    diagonalMeters: 4_850_000,
+    bounds: { north: 71.5, south: 34.5, east: 42, west: -25 },
+    countryIds: [
+      '008', '040', '056', '070', '100', '112', '191', '196', '203', '208',
+      '233', '246', '250', '276', '300', '348', '352', '372', '380', '428',
+      '440', '442', '498', '499', '528', '578', '616', '620', '642', '688',
+      '703', '705', '724', '752', '756', '804', '807', '826',
+    ],
+  },
+  {
+    id: 'north-america',
+    name: 'North America',
+    category: 'continent',
+    emoji: '🗽',
+    description: 'Canada, USA, Mexico, Central America & the Caribbean.',
+    diagonalMeters: 7_400_000,
+    bounds: { north: 72, south: 7, east: -52, west: -168 },
+    countryIds: [
+      '044', '084', '124', '188', '192', '214', '222', '304', '320', '332',
+      '340', '388', '484', '558', '591', '630', '840',
+    ],
+  },
+  {
+    id: 'south-america',
+    name: 'South America',
+    category: 'continent',
+    emoji: '🏔️',
+    description: 'Andean passes, coastal highways, and vibrant plazas.',
+    diagonalMeters: 7_600_000,
+    bounds: { north: 13, south: -56, east: -34, west: -82 },
+    countryIds: [
+      '032', '068', '076', '152', '170', '218', '238', '328', '600', '604',
+      '740', '858', '862',
+    ],
+  },
+  {
+    id: 'asia',
+    name: 'Asia',
+    category: 'continent',
+    emoji: '⛩️',
+    description: 'Tokyo alleys, Himalayan roads, Southeast Asia & Central Asia.',
+    diagonalMeters: 9_800_000,
+    bounds: { north: 75, south: -11, east: 150, west: 26 },
+    countryIds: [
+      '004', '050', '051', '064', '096', '104', '116', '144', '156', '158',
+      '268', '275', '356', '360', '364', '368', '376', '392', '398', '400',
+      '408', '410', '414', '417', '418', '422', '458', '496', '512', '524',
+      '586', '608', '626', '634', '682', '704', '760', '762', '764', '784',
+      '792', '795', '860', '887',
+    ],
+  },
+  {
+    id: 'africa',
+    name: 'Africa',
+    category: 'continent',
+    emoji: '🌍',
+    description: 'Savannas, Mediterranean coasts, and bustling cities.',
+    diagonalMeters: 8_200_000,
+    bounds: { north: 37.5, south: -35.5, east: 52, west: -18 },
+    countryIds: [
+      '012', '024', '072', '108', '120', '140', '148', '178', '180', '204',
+      '226', '231', '232', '262', '266', '270', '288', '324', '384', '404',
+      '426', '430', '434', '450', '454', '466', '478', '504', '508', '516',
+      '562', '566', '624', '646', '686', '694', '706', '710', '716', '728',
+      '729', '732', '748', '768', '788', '800', '834', '854', '894',
+    ],
+  },
+  {
+    id: 'oceania',
+    name: 'Oceania',
+    category: 'continent',
+    emoji: '🦘',
+    description: 'Australia, New Zealand, and Pacific islands.',
+    diagonalMeters: 6_200_000,
+    bounds: { north: 0, south: -48, east: 180, west: 112 },
+    countryIds: ['036', '090', '242', '540', '548', '554', '598'],
+  },
+  {
+    id: 'nordics',
+    name: 'Nordic Countries',
+    category: 'continent',
+    emoji: '❄️',
+    description: 'Norway, Sweden, Finland, Denmark & Iceland.',
+    diagonalMeters: 2_600_000,
+    bounds: { north: 71.5, south: 54.5, east: 32, west: -25 },
+    countryIds: ['208', '246', '352', '578', '752'],
+  },
+  {
+    id: 'country:840',
+    name: 'United States',
+    category: 'country',
+    emoji: '🇺🇸',
+    description: 'Coast-to-coast highways, small towns, and metros.',
+    diagonalMeters: 4_500_000,
+    bounds: { north: 71.5, south: 18.8, east: -66.5, west: -171.5 },
+    countryIds: ['840'],
+  },
+  {
+    id: 'country:392',
+    name: 'Japan',
+    category: 'country',
+    emoji: '🇯🇵',
+    description: 'Dense urban alleys, mountain roads, and coastal towns.',
+    diagonalMeters: 2_250_000,
+    bounds: { north: 45.6, south: 24.0, east: 146.0, west: 122.9 },
+    countryIds: ['392'],
+  },
+  {
+    id: 'country:826',
+    name: 'United Kingdom',
+    category: 'country',
+    emoji: '🇬🇧',
+    description: 'Country lanes, motorways, and historic towns.',
+    diagonalMeters: 1_050_000,
+    bounds: { north: 60.9, south: 49.8, east: 1.8, west: -8.7 },
+    countryIds: ['826'],
+  },
+  {
+    id: 'country:250',
+    name: 'France',
+    category: 'country',
+    emoji: '🇫🇷',
+    description: 'Metropolitan France from Brittany to the Alps.',
+    diagonalMeters: 1_180_000,
+    bounds: { north: 51.2, south: 41.3, east: 9.7, west: -5.5 },
+    countryIds: ['250'],
+  },
+  {
+    id: 'country:276',
+    name: 'Germany',
+    category: 'country',
+    emoji: '🇩🇪',
+    description: 'Autobahns, half-timbered villages, and Berlin streets.',
+    diagonalMeters: 980_000,
+    bounds: { north: 55.1, south: 47.2, east: 15.1, west: 5.8 },
+    countryIds: ['276'],
+  },
+  {
+    id: 'country:076',
+    name: 'Brazil',
+    category: 'country',
+    emoji: '🇧🇷',
+    description: 'Vast highways, coastal cities, and inland towns.',
+    diagonalMeters: 4_400_000,
+    bounds: { north: 5.3, south: -33.8, east: -34.7, west: -74.0 },
+    countryIds: ['076'],
+  },
+  {
+    id: 'country:036',
+    name: 'Australia',
+    category: 'country',
+    emoji: '🇦🇺',
+    description: 'Outback highways, coastal suburbs, and red dirt roads.',
+    diagonalMeters: 4_100_000,
+    bounds: { north: -10.5, south: -43.7, east: 153.7, west: 112.9 },
+    countryIds: ['036'],
+  },
+  {
+    id: 'country:124',
+    name: 'Canada',
+    category: 'country',
+    emoji: '🇨🇦',
+    description: 'Trans-Canada routes, prairies, and maritime harbors.',
+    diagonalMeters: 5_500_000,
+    bounds: { north: 70.0, south: 41.6, east: -52.5, west: -141.0 },
+    countryIds: ['124'],
+  },
+  {
+    id: CUSTOM_AREA_PRESET_ID,
+    name: 'Custom Area',
+    category: 'custom',
+    emoji: '📐',
+    description: 'Pick any custom city, state, or region box on the map.',
+    diagonalMeters: 500_000,
+    bounds: { north: 48.95, south: 48.78, east: 2.48, west: 2.22 },
+  },
+];
+
+export function resolveMapMeta(
+  mapId: string,
+  allPresets: MapPreset[],
+  customBounds?: CustomBounds,
+): { name: string; bounds: CustomBounds; diagonalMeters: number } {
+  if (mapId === CUSTOM_AREA_PRESET_ID && customBounds) {
+    const normalized: CustomBounds = {
+      north: Math.max(customBounds.north, customBounds.south),
+      south: Math.min(customBounds.north, customBounds.south),
+      east: Math.max(customBounds.east, customBounds.west),
+      west: Math.min(customBounds.east, customBounds.west),
+    };
+    return {
+      name: 'Custom Area',
+      bounds: normalized,
+      diagonalMeters: calculateBoundsDiagonalMeters(normalized),
+    };
+  }
+  const found =
+    allPresets.find((m) => m.id === mapId) ??
+    CURATED_MAP_PRESETS.find((m) => m.id === mapId) ??
+    CURATED_MAP_PRESETS[0];
+  return {
+    name: found.name,
+    bounds: found.bounds,
+    diagonalMeters: found.diagonalMeters,
+  };
+}

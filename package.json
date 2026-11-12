@@ -1,0 +1,45 @@
+{
+  "name": "vagabond",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free self-hosted multiplayer GeoGuessr alternative powered by MapillaryJS and OpenStreetMap",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c cyan,magenta \"tsx watch server/index.ts\" \"vite\"",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start": "NODE_ENV=production node dist/server/server/index.js",
+    "host": "npm run build && npm start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mapbox/vector-tile": "^2.0.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.475.0",
+    "mapillary-js": "^4.1.2",
+    "pbf": "^4.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/leaflet": "^1.9.16",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@types/topojson-client": "^3.1.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
