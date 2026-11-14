@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type {
+  AckResult,
   ClientToServerEvents,
+  CustomBounds,
+  FloatingEmoji,
   GameSettings,
   MapPreset,
+  PowerUpId,
   RoomState,
   ServerPublicInfo,
   ServerToClientEvents,
@@ -52,6 +56,13 @@ export function useVagabondClient() {
   const [shortenedNotice, setShortenedNotice] =
     useState<ShortenedNotice | null>(null);
   const [kickedReason, setKickedReason] = useState<string | null>(null);
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
+  const [sabotagedUntil, setSabotagedUntil] = useState<number | null>(null);
+  const [sabotageBy, setSabotageBy] = useState<string | null>(null);
+  const [powerUpNotice, setPowerUpNotice] = useState<{
+    id: number;
+    message: string;
+  } | null>(null);
 
   const refreshServerInfo = useCallback(async () => {
     try {
@@ -137,6 +148,36 @@ export function useVagabondClient() {
       setRoomState(null);
       setRoomCodeInUrl(null);
       setKickedReason(reason);
+    });
+
+    socket.on('room:emoji', (emoji) => {
+      setFloatingEmojis((prev) => [...prev.slice(-15), emoji]);
+      setTimeout(() => {
+        setFloatingEmojis((prev) => prev.filter((e) => e.id !== emoji.id));
+      }, 4000);
+    });
+
+    socket.on('room:powerUpUsed', ({ sourcePlayerName, powerUpId }) => {
+      const labels: Record<string, string> = {
+        radar: '🥽 50/50 Radar',
+        hemisphere: '🧭 Hemisphere Clue',
+        mud: '💨 Mud Splatter',
+        peek: '🕵️ Pin Peek',
+      };
+      setPowerUpNotice({
+        id: Date.now(),
+        message: `${sourcePlayerName} activated ${labels[powerUpId] ?? powerUpId}!`,
+      });
+      setTimeout(() => setPowerUpNotice(null), 4500);
+    });
+
+    socket.on('room:sabotaged', ({ byPlayerName, durationMs }) => {
+      setSabotageBy(byPlayerName);
+      setSabotagedUntil(Date.now() + durationMs);
+      setTimeout(() => {
+        setSabotagedUntil((cur) => (cur && cur <= Date.now() ? null : cur));
+        setSabotageBy(null);
+      }, durationMs);
     });
 
     return () => {
@@ -301,6 +342,49 @@ export function useVagabondClient() {
     [roomState],
   );
 
+  const sendEmoji = useCallback(
+    (emoji: string) => {
+      if (!socketRef.current || !roomState) return;
+      socketRef.current.emit('room:sendEmoji', {
+        roomCode: roomState.code,
+        emoji,
+      });
+    },
+    [roomState],
+  );
+
+  const usePowerUp = useCallback(
+    (
+      powerUpId: PowerUpId,
+      targetPlayerId?: string,
+    ): Promise<
+      AckResult<{
+        clue?: string;
+        opponentPins?: Array<{
+          lat: number;
+          lng: number;
+          color: string;
+          name: string;
+        }>;
+        radarBox?: CustomBounds;
+      }>
+    > => {
+      return new Promise((resolve) => {
+        const sock = socketRef.current;
+        if (!sock || !roomState) {
+          resolve({ ok: false, error: 'Not in a room.' });
+          return;
+        }
+        sock.emit(
+          'room:usePowerUp',
+          { roomCode: roomState.code, powerUpId, targetPlayerId },
+          (res) => resolve(res),
+        );
+      });
+    },
+    [roomState],
+  );
+
   const leaveRoom = useCallback(() => {
     sessionStorage.removeItem(ACTIVE_ROOM_KEY);
     if (socketRef.current && roomState) {
@@ -319,6 +403,10 @@ export function useVagabondClient() {
     serverInfo,
     shortenedNotice,
     kickedReason,
+    floatingEmojis,
+    sabotagedUntil,
+    sabotageBy,
+    powerUpNotice,
     refreshServerInfo,
     createRoom,
     joinRoom,
@@ -329,6 +417,8 @@ export function useVagabondClient() {
     nextRound,
     playAgain,
     kickPlayer,
+    sendEmoji,
+    usePowerUp,
     leaveRoom,
   };
 }

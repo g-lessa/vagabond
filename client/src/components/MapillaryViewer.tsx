@@ -6,6 +6,8 @@ interface MapillaryViewerProps {
   accessToken: string;
   imageId: string;
   allowMoving: boolean;
+  allowPanning?: boolean;
+  allowZooming?: boolean;
   resetSignal: number;
   onBearingChange: (bearing: number) => void;
   onMovedFromStart: (moved: boolean) => void;
@@ -15,6 +17,8 @@ export function MapillaryViewer({
   accessToken,
   imageId,
   allowMoving,
+  allowPanning = true,
+  allowZooming = true,
   resetSignal,
   onBearingChange,
   onMovedFromStart,
@@ -52,7 +56,7 @@ export function MapillaryViewer({
         popup: false,
         attribution: true,
         direction: allowMoving,
-        zoom: true,
+        zoom: allowZooming,
         keyboard: {
           keyPlay: false,
           keySequenceNavigation: allowMoving,
@@ -103,8 +107,8 @@ export function MapillaryViewer({
       viewerRef.current = null;
       el.replaceChildren();
     };
-    // Re-init cleanly when token, round start imageId, or allowMoving changes
-  }, [accessToken, imageId, allowMoving]);
+    // Re-init cleanly when token, round start imageId, or interaction rules change
+  }, [accessToken, imageId, allowMoving, allowPanning, allowZooming]);
 
   useEffect(() => {
     if (resetSignal === 0) return;
@@ -121,8 +125,26 @@ export function MapillaryViewer({
   }, [resetSignal]);
 
   return (
-    <div style={{ position: 'relative', inlineSize: '100%', blockSize: '100%' }}>
+    <div
+      style={{ position: 'relative', inlineSize: '100%', blockSize: '100%' }}
+      onWheel={!allowZooming ? (e) => e.stopPropagation() : undefined}
+    >
       <div ref={containerRef} className="panorama-host" />
+      {!allowPanning ? (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 410,
+            cursor: 'not-allowed',
+            background: 'transparent',
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Camera angle locked (No-Pan mode)"
+        />
+      ) : null}
       {loading ? (
         <div
           role="status"

@@ -17,6 +17,7 @@ export interface SpawnedLocation {
   compassAngle: number;
   sequenceId: string | null;
   countryName: string | null;
+  capturedAtYear?: number | null;
 }
 
 export interface SpawnRequest {
@@ -99,7 +100,7 @@ async function verifyImageViaGraph(
 ): Promise<SpawnedLocation | null> {
   const url = `https://graph.mapillary.com/${encodeURIComponent(
     imageId,
-  )}?fields=id,geometry,computed_geometry,is_pano,compass_angle`;
+  )}?fields=id,geometry,computed_geometry,is_pano,compass_angle,captured_at`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 7000);
@@ -118,6 +119,7 @@ async function verifyImageViaGraph(
       id?: string;
       is_pano?: boolean;
       compass_angle?: number;
+      captured_at?: number | string;
       geometry?: { coordinates?: [number, number] };
       computed_geometry?: { coordinates?: [number, number] };
     };
@@ -132,6 +134,13 @@ async function verifyImageViaGraph(
     }
     const [lng, lat] = coords;
     const countryName = geoCatalog.findCountryName(lng, lat);
+    let capturedAtYear: number | null = null;
+    if (data.captured_at) {
+      const dt = new Date(data.captured_at);
+      if (!Number.isNaN(dt.getTime())) {
+        capturedAtYear = dt.getFullYear();
+      }
+    }
     return {
       imageId: String(data.id ?? imageId),
       lat,
@@ -141,6 +150,7 @@ async function verifyImageViaGraph(
         typeof data.compass_angle === 'number' ? data.compass_angle : 0,
       sequenceId,
       countryName,
+      capturedAtYear,
     };
   } catch (err) {
     if (err instanceof Error && err.message.includes('access token')) {

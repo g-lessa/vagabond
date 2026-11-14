@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { CheckCircle2, Layers, Map as MapIcon, Maximize2, Minimize2, Send } from 'lucide-react';
+import type { CustomBounds } from '@shared/types';
 import { MAP_TILE_LAYERS, type TileStyle } from '../lib/mapTiles';
+import { playPinDropSound } from '../lib/sound';
 
 type MapSize = 'sm' | 'md' | 'lg';
 
@@ -11,6 +13,9 @@ interface GuessMinimapProps {
   hasGuessed: boolean;
   playerColor: string;
   pin: { lat: number; lng: number } | null;
+  muted?: boolean;
+  radarBox?: CustomBounds | null;
+  opponentPins?: Array<{ lat: number; lng: number; color: string; name: string }>;
   onPinChange: (coords: { lat: number; lng: number }) => void;
   onSubmitGuess: () => void;
 }
@@ -20,6 +25,9 @@ export function GuessMinimap({
   hasGuessed,
   playerColor,
   pin,
+  muted = false,
+  radarBox = null,
+  opponentPins = [],
   onPinChange,
   onSubmitGuess,
 }: GuessMinimapProps) {
@@ -62,6 +70,7 @@ export function GuessMinimap({
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (hasGuessedRef.current) return;
       const wrapped = e.latlng.wrap();
+      playPinDropSound(muted);
       onPinChangeRef.current({ lat: wrapped.lat, lng: wrapped.lng });
     });
 
@@ -119,6 +128,56 @@ export function GuessMinimap({
       markerRef.current = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
     }
   }, [pin, playerColor]);
+
+  // Render radar zone if activated
+  const radarLayerRef = useRef<L.Rectangle | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (radarLayerRef.current) {
+      map.removeLayer(radarLayerRef.current);
+      radarLayerRef.current = null;
+    }
+    if (radarBox) {
+      const bounds: L.LatLngBoundsLiteral = [
+        [radarBox.south, radarBox.west],
+        [radarBox.north, radarBox.east],
+      ];
+      const rect = L.rectangle(bounds, {
+        color: '#10b981',
+        weight: 2,
+        fillColor: '#10b981',
+        fillOpacity: 0.22,
+        dashArray: '6, 6',
+      }).addTo(map);
+      radarLayerRef.current = rect;
+      map.fitBounds(bounds, { padding: [20, 20], maxZoom: 5 });
+    }
+  }, [radarBox]);
+
+  // Render ghost opponent pins if Pin Peek was activated
+  const opponentMarkersRef = useRef<L.Marker[]>([]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const m of opponentMarkersRef.current) {
+      map.removeLayer(m);
+    }
+    opponentMarkersRef.current = [];
+
+    if (opponentPins && opponentPins.length > 0) {
+      for (const op of opponentPins) {
+        const icon = L.divIcon({
+          className: 'opponent-ghost-pin',
+          html: `<div style="padding:2px 6px;border-radius:999px;background:${op.color};color:#ffffff;font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.6);border:1px solid #fff;">📍 ${op.name}</div>`,
+          iconSize: [60, 20],
+          iconAnchor: [30, 20],
+        });
+        const m = L.marker([op.lat, op.lng], { icon }).addTo(map);
+        opponentMarkersRef.current.push(m);
+      }
+    }
+  }, [opponentPins]);
 
   function cycleTileStyle() {
     setTileStyle((prev) =>

@@ -219,6 +219,23 @@ export function createVagabondServer(options: AppInstanceOptions = {}) {
       ack?.(res);
     });
 
+    socket.on('room:sendEmoji', ({ roomCode, emoji }) => {
+      manager.sendEmoji(socket.id, roomCode, emoji);
+    });
+
+    socket.on(
+      'room:usePowerUp',
+      ({ roomCode, powerUpId, targetPlayerId }, ack) => {
+        const res = manager.usePowerUp(
+          socket.id,
+          roomCode,
+          powerUpId,
+          targetPlayerId,
+        );
+        ack(res);
+      },
+    );
+
     socket.on('room:leave', ({ roomCode }) => {
       socket.leave(roomCode.toUpperCase());
       manager.handleDisconnect(socket.id);

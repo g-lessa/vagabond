@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
+  Camera,
   ExternalLink,
   MapPin,
   Trophy,
 } from 'lucide-react';
 import type { RoomState } from '@shared/types';
 import { formatDistance } from '@shared/scoring';
-import { playRoundEndChime } from '../lib/sound';
+import {
+  playDamageHitSound,
+  playEliminatedSound,
+  playRoundEndChime,
+} from '../lib/sound';
 import { ResultsMap } from './ResultsMap';
 
 interface RoundResultScreenProps {
@@ -26,20 +31,33 @@ export function RoundResultScreen({
   const result = room.currentRoundResult;
   const me = room.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
+  const isBattleRoyale = room.settings.gameMode === 'battle_royale';
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     if (result) {
-      playRoundEndChime(muted);
+      const myGuess = result.guesses.find((g) => g.playerId === playerId);
+      if (isBattleRoyale && myGuess?.isEliminated) {
+        playEliminatedSound(muted);
+      } else if (isBattleRoyale && (myGuess?.damageTaken ?? 0) > 0) {
+        playDamageHitSound(muted);
+      } else {
+        playRoundEndChime(muted);
+      }
     }
-    // Play chime once when entering round result
+    // Play sound once when entering round result
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.roundNumber]);
 
   if (!result) return null;
 
-  const isFinalRound = result.roundNumber >= result.totalRounds;
+  const connectedPlayers = room.players.filter((p) => p.connected);
+  const alivePlayers = connectedPlayers.filter((p) => !p.isEliminated);
+  const isBrDecided =
+    isBattleRoyale && connectedPlayers.length > 1 && alivePlayers.length <= 1;
+  const isFinalRound =
+    result.roundNumber >= result.totalRounds || isBrDecided;
   const mapillaryExternalUrl = `https://www.mapillary.com/app/?pKey=${encodeURIComponent(
     result.actual.imageId,
   )}&focus=photo`;
@@ -62,8 +80,14 @@ export function RoundResultScreen({
       <section className="results-panel" aria-labelledby="round-result-heading">
         <div className="results-header-bar">
           <div>
-            <div className="field-hint">
-              Round {result.roundNumber} of {result.totalRounds} Results
+            <div className="field-hint" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span>Round {result.roundNumber} of {result.totalRounds} Results</span>
+              {result.actual.capturedAtYear ? (
+                <span className="badge" style={{ fontSize: '0.75rem' }}>
+                  <Camera size={12} aria-hidden="true" />
+                  Captured {result.actual.capturedAtYear}
+                </span>
+              ) : null}
             </div>
             <h1
               id="round-result-heading"
@@ -132,7 +156,7 @@ export function RoundResultScreen({
         >
           <table className="results-table">
             <caption id="round-standings-caption">
-              Round {result.roundNumber} Standings
+              Round {result.roundNumber} Standings {isBattleRoyale ? '— Battle Royale' : ''}
             </caption>
             <thead>
               <tr>
@@ -140,12 +164,24 @@ export function RoundResultScreen({
                 <th scope="col">Player</th>
                 <th scope="col">Distance</th>
                 <th scope="col">Round Score</th>
-                <th scope="col">Total Score</th>
+                {isBattleRoyale ? (
+                  <>
+                    <th scope="col">Damage</th>
+                    <th scope="col">Remaining HP</th>
+                  </>
+                ) : (
+                  <th scope="col">Total Score</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {result.guesses.map((g, idx) => {
                 const pct = Math.round((g.score / 5000) * 100);
+                const startingHp = room.settings.startingHp || 10000;
+                const hpPct = Math.max(
+                  0,
+                  Math.min(100, Math.round(((g.remainingHp ?? 0) / startingHp) * 100)),
+                );
                 return (
                   <tr
                     key={g.playerId}
@@ -168,6 +204,11 @@ export function RoundResultScreen({
                           {g.playerName}
                           {g.playerId === playerId ? ' (You)' : ''}
                         </span>
+                        {g.isEliminated ? (
+                          <span className="badge badge--danger" style={{ fontSize: '0.72rem', padding: '0.1rem 0.4rem' }}>
+                            💀 Out
+                          </span>
+                        ) : null}
                       </div>
                     </th>
                     <td data-label="Distance" className="tabular-nums">
@@ -183,9 +224,45 @@ export function RoundResultScreen({
                       </span>
                       <strong>+{g.score.toLocaleString('en-US')}</strong>
                     </td>
-                    <td data-label="Total Score" className="tabular-nums">
-                      <strong>{g.totalScore.toLocaleString('en-US')}</strong>
-                    </td>
+
+                    {isBattleRoyale ? (
+                      <>
+                        <td data-label="Damage" className="tabular-nums" style={{ color: (g.damageTaken ?? 0) > 0 ? '#ef4444' : 'var(--text-muted)' }}>
+                          {(g.damageTaken ?? 0) > 0 ? `-${(g.damageTaken ?? 0).toLocaleString()} HP` : '0 HP'}
+                        </td>
+                        <td data-label="Remaining HP" className="tabular-nums">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <span
+                              className="score-bar-track"
+                              style={{
+                                '--score-pct': hpPct,
+                                inlineSize: '65px',
+                              } as React.CSSProperties}
+                              aria-hidden="true"
+                            >
+                              <span
+                                className="score-bar-fill"
+                                style={{
+                                  background:
+                                    hpPct > 50
+                                      ? '#10b981'
+                                      : hpPct > 25
+                                        ? '#f59e0b'
+                                        : '#ef4444',
+                                }}
+                              />
+                            </span>
+                            <strong style={{ color: g.isEliminated ? '#ef4444' : undefined }}>
+                              {g.isEliminated ? '0 HP (Eliminated)' : `${(g.remainingHp ?? 0).toLocaleString()} HP`}
+                            </strong>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <td data-label="Total Score" className="tabular-nums">
+                        <strong>{g.totalScore.toLocaleString('en-US')}</strong>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

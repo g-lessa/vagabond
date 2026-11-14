@@ -66,9 +66,9 @@ export function LobbyScreen({
   const me = room.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
 
-  const [mapTab, setMapTab] = useState<'featured' | 'continents' | 'countries'>(
-    'featured',
-  );
+  const [mapTab, setMapTab] = useState<
+    'featured' | 'themed' | 'continents' | 'countries'
+  >('featured');
   const [mapQuery, setMapQuery] = useState('');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -112,6 +112,7 @@ export function LobbyScreen({
         (m) =>
           m.category === 'global' ||
           m.category === 'custom' ||
+          m.category === 'themed' ||
           [
             'europe',
             'north-america',
@@ -124,6 +125,9 @@ export function LobbyScreen({
             'country:076',
           ].includes(m.id),
       );
+    }
+    if (mapTab === 'themed') {
+      return maps.filter((m) => m.category === 'themed');
     }
     if (mapTab === 'continents') {
       return maps.filter(
@@ -185,6 +189,59 @@ export function LobbyScreen({
         </div>
 
         <div className="settings-grid">
+          {/* Game Mode */}
+          <div className="field">
+            <label>Game Mode</label>
+            <div className="preset-row">
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.gameMode === 'classic'}
+                disabled={!isHost}
+                onClick={() => void onUpdateSettings({ gameMode: 'classic' })}
+              >
+                🎯 Classic Points (0–5000)
+              </button>
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.gameMode === 'battle_royale'}
+                disabled={!isHost}
+                onClick={() =>
+                  void onUpdateSettings({ gameMode: 'battle_royale' })
+                }
+              >
+                ⚔️ Battle Royale (HP Knockout)
+              </button>
+            </div>
+            {room.settings.gameMode === 'battle_royale' ? (
+              <div
+                style={{
+                  marginBlockStart: '0.45rem',
+                  display: 'flex',
+                  gap: '0.5rem',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span className="field-hint">Starting Health:</span>
+                {[5000, 10000, 15000].map((hp) => (
+                  <button
+                    key={hp}
+                    type="button"
+                    className="pill-btn"
+                    aria-pressed={room.settings.startingHp === hp}
+                    disabled={!isHost}
+                    onClick={() => void onUpdateSettings({ startingHp: hp })}
+                    style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                  >
+                    {hp.toLocaleString()} HP
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           {/* Number of Rounds */}
           <div className="field">
             <label htmlFor="rounds-count-input">
@@ -405,6 +462,17 @@ export function LobbyScreen({
                 <button
                   type="button"
                   className="pill-btn"
+                  aria-pressed={mapTab === 'themed' && !mapQuery}
+                  onClick={() => {
+                    setMapTab('themed');
+                    setMapQuery('');
+                  }}
+                >
+                  🌲 Themed &amp; Wild
+                </button>
+                <button
+                  type="button"
+                  className="pill-btn"
                   aria-pressed={mapTab === 'continents' && !mapQuery}
                   onClick={() => {
                     setMapTab('continents');
@@ -467,7 +535,188 @@ export function LobbyScreen({
             </div>
           </div>
 
-          {/* 360° & Movement Toggles */}
+          {/* NMPZ Competitive Rules */}
+          <div className="field">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <label>Movement &amp; Camera Restrictions (NMPZ)</label>
+              <div className="preset-row">
+                <button
+                  type="button"
+                  className="pill-btn"
+                  aria-pressed={
+                    room.settings.allowMoving &&
+                    room.settings.allowPanning &&
+                    room.settings.allowZooming
+                  }
+                  disabled={!isHost}
+                  onClick={() =>
+                    void onUpdateSettings({
+                      allowMoving: true,
+                      allowPanning: true,
+                      allowZooming: true,
+                    })
+                  }
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  className="pill-btn"
+                  aria-pressed={
+                    !room.settings.allowMoving &&
+                    room.settings.allowPanning &&
+                    room.settings.allowZooming
+                  }
+                  disabled={!isHost}
+                  onClick={() =>
+                    void onUpdateSettings({
+                      allowMoving: false,
+                      allowPanning: true,
+                      allowZooming: true,
+                    })
+                  }
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                >
+                  No Move (NM)
+                </button>
+                <button
+                  type="button"
+                  className="pill-btn"
+                  aria-pressed={
+                    !room.settings.allowMoving &&
+                    !room.settings.allowPanning &&
+                    room.settings.allowZooming
+                  }
+                  disabled={!isHost}
+                  onClick={() =>
+                    void onUpdateSettings({
+                      allowMoving: false,
+                      allowPanning: false,
+                      allowZooming: true,
+                    })
+                  }
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                >
+                  No Move &amp; Pan
+                </button>
+                <button
+                  type="button"
+                  className="pill-btn"
+                  aria-pressed={
+                    !room.settings.allowMoving &&
+                    !room.settings.allowPanning &&
+                    !room.settings.allowZooming
+                  }
+                  disabled={!isHost}
+                  onClick={() =>
+                    void onUpdateSettings({
+                      allowMoving: false,
+                      allowPanning: false,
+                      allowZooming: false,
+                    })
+                  }
+                  style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                >
+                  NMPZ (All Locked)
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '0.75rem',
+                marginBlockStart: '0.6rem',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.86rem',
+                  cursor: isHost ? 'pointer' : 'default',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={room.settings.allowMoving}
+                  disabled={!isHost}
+                  onChange={(e) =>
+                    void onUpdateSettings({ allowMoving: e.target.checked })
+                  }
+                />
+                Allow Road Movement
+              </label>
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.86rem',
+                  cursor: isHost ? 'pointer' : 'default',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={room.settings.allowPanning}
+                  disabled={!isHost}
+                  onChange={(e) =>
+                    void onUpdateSettings({ allowPanning: e.target.checked })
+                  }
+                />
+                Allow Camera Panning (Rotate)
+              </label>
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.86rem',
+                  cursor: isHost ? 'pointer' : 'default',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={room.settings.allowZooming}
+                  disabled={!isHost}
+                  onChange={(e) =>
+                    void onUpdateSettings({ allowZooming: e.target.checked })
+                  }
+                />
+                Allow Camera Zoom
+              </label>
+            </div>
+          </div>
+
+          {/* Party Mode Power-Ups Toggle */}
+          <div className="toggle-row">
+            <div>
+              <label
+                htmlFor="toggle-enable-powerups"
+                style={{ fontWeight: 600, display: 'block' }}
+              >
+                🍌 Party Mode (Power-Ups &amp; Sabotages)
+              </label>
+              <span className="field-hint">
+                Adds 🥽 50/50 Radar, 🧭 Hemisphere Clues, 💨 Mud Splatter, and 🕵️ Pin Peek.
+              </span>
+            </div>
+            <input
+              id="toggle-enable-powerups"
+              type="checkbox"
+              checked={room.settings.enablePowerUps}
+              disabled={!isHost}
+              onChange={(e) =>
+                void onUpdateSettings({ enablePowerUps: e.target.checked })
+              }
+            />
+          </div>
+
           <div className="toggle-row">
             <div>
               <label
@@ -487,29 +736,6 @@ export function LobbyScreen({
               disabled={!isHost}
               onChange={(e) =>
                 void onUpdateSettings({ only360: e.target.checked })
-              }
-            />
-          </div>
-
-          <div className="toggle-row">
-            <div>
-              <label
-                htmlFor="toggle-allow-moving"
-                style={{ fontWeight: 600, display: 'block' }}
-              >
-                Allow Street Movement
-              </label>
-              <span className="field-hint">
-                Disable for a classic No-Move challenge (pan &amp; zoom only).
-              </span>
-            </div>
-            <input
-              id="toggle-allow-moving"
-              type="checkbox"
-              checked={room.settings.allowMoving}
-              disabled={!isHost}
-              onChange={(e) =>
-                void onUpdateSettings({ allowMoving: e.target.checked })
               }
             />
           </div>

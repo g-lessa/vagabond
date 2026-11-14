@@ -26,6 +26,10 @@ export function App() {
     serverInfo,
     shortenedNotice,
     kickedReason,
+    floatingEmojis,
+    sabotagedUntil,
+    sabotageBy,
+    powerUpNotice,
     refreshServerInfo,
     createRoom,
     joinRoom,
@@ -36,6 +40,8 @@ export function App() {
     nextRound,
     playAgain,
     kickPlayer,
+    sendEmoji,
+    usePowerUp,
     leaveRoom,
   } = useVagabondClient();
 
@@ -154,8 +160,14 @@ export function App() {
           playerId={playerId}
           mapillaryToken={mapillaryToken}
           shortenedNotice={shortenedNotice}
+          floatingEmojis={floatingEmojis}
+          sabotagedUntil={sabotagedUntil}
+          sabotageBy={sabotageBy}
+          powerUpNotice={powerUpNotice}
           muted={muted}
           onToggleMute={handleToggleMute}
+          onSendEmoji={sendEmoji}
+          onUsePowerUp={usePowerUp}
           onDraftPin={sendDraftPin}
           onSubmitGuess={submitGuess}
         />

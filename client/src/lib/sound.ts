@@ -39,6 +39,11 @@ function playTone(
   osc.stop(now + durationSec + 0.02);
 }
 
+export function playPinDropSound(muted: boolean): void {
+  if (muted) return;
+  playTone(720, 0.05, 'sine', 0.06);
+}
+
 export function playGuessLockedSound(muted: boolean): void {
   if (muted) return;
   playTone(587.33, 0.14, 'triangle', 0.08);
@@ -55,4 +60,36 @@ export function playRoundEndChime(muted: boolean): void {
   playTone(523.25, 0.16, 'triangle', 0.07);
   setTimeout(() => playTone(659.25, 0.18, 'triangle', 0.07), 90);
   setTimeout(() => playTone(783.99, 0.28, 'triangle', 0.07), 180);
+}
+
+export function playDamageHitSound(muted: boolean): void {
+  if (muted) return;
+  playTone(180, 0.18, 'sawtooth', 0.1);
+  setTimeout(() => playTone(120, 0.25, 'sawtooth', 0.09), 60);
+}
+
+export function playEliminatedSound(muted: boolean): void {
+  if (muted) return;
+  playTone(330, 0.2, 'sawtooth', 0.08);
+  setTimeout(() => playTone(293.66, 0.25, 'sawtooth', 0.08), 120);
+  setTimeout(() => playTone(220, 0.45, 'sawtooth', 0.1), 250);
+}
+
+export function playPowerUpSound(muted: boolean): void {
+  if (muted) return;
+  playTone(440, 0.1, 'sine', 0.07);
+  setTimeout(() => playTone(659.25, 0.12, 'sine', 0.08), 50);
+  setTimeout(() => playTone(880, 0.16, 'triangle', 0.09), 110);
+}
+
+export function playMudSplatSound(muted: boolean): void {
+  if (muted) return;
+  playTone(140, 0.15, 'square', 0.07);
+  setTimeout(() => playTone(90, 0.2, 'sawtooth', 0.08), 50);
+}
+
+export function playEmojiPopSound(muted: boolean): void {
+  if (muted) return;
+  playTone(660, 0.08, 'sine', 0.06);
+  setTimeout(() => playTone(990, 0.1, 'sine', 0.05), 40);
 }

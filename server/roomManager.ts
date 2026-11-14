@@ -2,10 +2,14 @@ import crypto from 'node:crypto';
 import type { Server as SocketIOServer } from 'socket.io';
 import {
   DEFAULT_GAME_SETTINGS,
+  type AckResult,
   type ClientToServerEvents,
+  type CustomBounds,
+  type FloatingEmoji,
   type GameSettings,
   type Player,
   type PlayerGuessResult,
+  type PowerUpId,
   type RoomState,
   type RoundBrief,
   type RoundResult,
@@ -22,6 +26,15 @@ import {
   type SpawnedLocation,
   type SpawnRequest,
 } from './mapillarySpawner.js';
+
+function createDefaultPowerUps(): Record<PowerUpId, number> {
+  return {
+    radar: 1,
+    hemisphere: 1,
+    mud: 1,
+    peek: 1,
+  };
+}
 
 const PLAYER_COLORS = [
   '#38bdf8',
@@ -143,6 +156,15 @@ export class RoomManager {
     next.shortenTimerOnFirstGuess = Boolean(next.shortenTimerOnFirstGuess);
     next.only360 = Boolean(next.only360);
     next.allowMoving = Boolean(next.allowMoving);
+    next.allowPanning = Boolean(next.allowPanning);
+    next.allowZooming = Boolean(next.allowZooming);
+    next.enablePowerUps = Boolean(next.enablePowerUps);
+    next.gameMode =
+      next.gameMode === 'battle_royale' ? 'battle_royale' : 'classic';
+    next.startingHp = Math.max(
+      1000,
+      Math.min(30000, Math.round(Number(next.startingHp) || 10000)),
+    );
     const rawAuto = Math.round(Number(next.autoAdvanceSeconds) || 0);
     next.autoAdvanceSeconds =
       rawAuto <= 0 ? 0 : Math.max(5, Math.min(30, rawAuto));
@@ -167,6 +189,10 @@ export class RoomManager {
         mapName: room.currentRound.mapName,
         only360: room.settings.only360,
         allowMoving: room.settings.allowMoving,
+        allowPanning: room.settings.allowPanning,
+        allowZooming: room.settings.allowZooming,
+        gameMode: room.settings.gameMode,
+        enablePowerUps: room.settings.enablePowerUps,
       };
     }
 
@@ -179,6 +205,10 @@ export class RoomManager {
       totalScore: p.totalScore,
       hasGuessedCurrentRound: p.hasGuessedCurrentRound,
       lastRoundScore: p.lastRoundScore,
+      hp: p.hp,
+      maxHp: p.maxHp,
+      isEliminated: p.isEliminated,
+      powerUps: p.powerUps,
     }));
 
     return {
@@ -249,6 +279,10 @@ export class RoomManager {
       totalScore: 0,
       hasGuessedCurrentRound: false,
       lastRoundScore: null,
+      hp: room.settings.startingHp,
+      maxHp: room.settings.startingHp,
+      isEliminated: false,
+      powerUps: createDefaultPowerUps(),
       socketId,
     });
 
@@ -298,6 +332,10 @@ export class RoomManager {
         totalScore: 0,
         hasGuessedCurrentRound: false,
         lastRoundScore: null,
+        hp: room.settings.startingHp,
+        maxHp: room.settings.startingHp,
+        isEliminated: false,
+        powerUps: createDefaultPowerUps(),
         socketId,
       });
     }
@@ -378,6 +416,10 @@ export class RoomManager {
       player.totalScore = 0;
       player.hasGuessedCurrentRound = false;
       player.lastRoundScore = null;
+      player.hp = room.settings.startingHp;
+      player.maxHp = room.settings.startingHp;
+      player.isEliminated = false;
+      player.powerUps = createDefaultPowerUps();
     }
 
     return await this.launchRound(room, 1);
@@ -404,7 +446,15 @@ export class RoomManager {
     }
 
     const finishedRoundNumber = room.roundHistory.length;
-    if (finishedRoundNumber >= room.settings.roundsCount) {
+    const isBattleRoyale = room.settings.gameMode === 'battle_royale';
+    const connectedPlayers = Array.from(room.players.values()).filter(
+      (p) => p.connected,
+    );
+    const alivePlayers = connectedPlayers.filter((p) => !p.isEliminated);
+    const brDecided =
+      isBattleRoyale && connectedPlayers.length > 1 && alivePlayers.length <= 1;
+
+    if (finishedRoundNumber >= room.settings.roundsCount || brDecided) {
       room.phase = 'game_over';
       room.currentRound = null;
       this.broadcastRoom(room);
@@ -437,6 +487,10 @@ export class RoomManager {
       player.totalScore = 0;
       player.hasGuessedCurrentRound = false;
       player.lastRoundScore = null;
+      player.hp = room.settings.startingHp;
+      player.maxHp = room.settings.startingHp;
+      player.isEliminated = false;
+      player.powerUps = createDefaultPowerUps();
     }
     this.broadcastRoom(room);
     return { ok: true };
@@ -542,6 +596,153 @@ export class RoomManager {
       this.broadcastRoom(room);
     }
     return { ok: true };
+  }
+
+  sendEmoji(socketId: string, roomCode: string, emoji: string): void {
+    const room = this.rooms.get(roomCode.toUpperCase());
+    if (!room) return;
+    const player = this.findPlayerBySocket(room, socketId);
+    if (!player) return;
+
+    const cleanEmoji = emoji.slice(0, 4);
+    const item: FloatingEmoji = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      playerId: player.id,
+      playerName: player.name,
+      playerColor: player.color,
+      emoji: cleanEmoji,
+      timestamp: Date.now(),
+    };
+
+    if (this.io) {
+      this.io.to(room.code).emit('room:emoji', item);
+    }
+  }
+
+  usePowerUp(
+    socketId: string,
+    roomCode: string,
+    powerUpId: PowerUpId,
+    targetPlayerId?: string,
+  ): AckResult<{
+    clue?: string;
+    opponentPins?: Array<{
+      lat: number;
+      lng: number;
+      color: string;
+      name: string;
+    }>;
+    radarBox?: CustomBounds;
+  }> {
+    const room = this.rooms.get(roomCode.toUpperCase());
+    if (!room || room.phase !== 'playing' || !room.currentRound) {
+      return { ok: false, error: 'No active round.' };
+    }
+    const player = this.findPlayerBySocket(room, socketId);
+    if (!player) return { ok: false, error: 'Player not in room.' };
+
+    if (!room.settings.enablePowerUps) {
+      return { ok: false, error: 'Power-ups are disabled in this match.' };
+    }
+
+    const remaining = player.powerUps[powerUpId] ?? 0;
+    if (remaining <= 0) {
+      return {
+        ok: false,
+        error: `You already used your ${powerUpId} power-up!`,
+      };
+    }
+
+    player.powerUps[powerUpId] = remaining - 1;
+
+    const loc = room.currentRound.location;
+    const data: {
+      clue?: string;
+      opponentPins?: Array<{
+        lat: number;
+        lng: number;
+        color: string;
+        name: string;
+      }>;
+      radarBox?: CustomBounds;
+    } = {};
+
+    if (powerUpId === 'radar') {
+      const latSpan = 30;
+      const lngSpan = 50;
+      const offsetLat = (Math.random() - 0.5) * 12;
+      const offsetLng = (Math.random() - 0.5) * 18;
+      data.radarBox = {
+        north: Math.min(85, loc.lat + latSpan / 2 + offsetLat),
+        south: Math.max(-60, loc.lat - latSpan / 2 + offsetLat),
+        east: Math.min(180, loc.lng + lngSpan / 2 + offsetLng),
+        west: Math.max(-180, loc.lng - lngSpan / 2 + offsetLng),
+      };
+    } else if (powerUpId === 'hemisphere') {
+      const ns = loc.lat >= 0 ? 'Northern' : 'Southern';
+      const ew = loc.lng >= 0 ? 'Eastern' : 'Western';
+      const countryHint = loc.countryName
+        ? ` · Near ${loc.countryName}`
+        : '';
+      data.clue = `${ns} & ${ew} Hemispheres${countryHint}`;
+    } else if (powerUpId === 'peek') {
+      const pins: Array<{
+        lat: number;
+        lng: number;
+        color: string;
+        name: string;
+      }> = [];
+      for (const [id, pin] of room.currentRound.draftPins.entries()) {
+        if (id !== player.id) {
+          const other = room.players.get(id);
+          if (other) {
+            pins.push({
+              lat: pin.lat,
+              lng: pin.lng,
+              color: other.color,
+              name: other.name,
+            });
+          }
+        }
+      }
+      for (const [id, guess] of room.currentRound.lockedGuesses.entries()) {
+        if (id !== player.id) {
+          const other = room.players.get(id);
+          if (other && !pins.some((p) => p.name === other.name)) {
+            pins.push({
+              lat: guess.lat,
+              lng: guess.lng,
+              color: other.color,
+              name: other.name,
+            });
+          }
+        }
+      }
+      data.opponentPins = pins;
+    } else if (powerUpId === 'mud') {
+      if (this.io) {
+        for (const other of room.players.values()) {
+          if (other.id !== player.id && other.socketId) {
+            this.io.to(other.socketId).emit('room:sabotaged', {
+              byPlayerName: player.name,
+              durationMs: 6000,
+            });
+          }
+        }
+      }
+    }
+
+    if (this.io) {
+      this.io.to(room.code).emit('room:powerUpUsed', {
+        sourcePlayerId: player.id,
+        sourcePlayerName: player.name,
+        powerUpId,
+        targetPlayerId,
+      });
+    }
+    this.broadcastRoom(room);
+
+    return { ok: true, data };
   }
 
   handleDisconnect(socketId: string): void {
@@ -756,6 +957,29 @@ export class RoomManager {
 
     const { lat: actualLat, lng: actualLng } = round.location;
     const guesses: PlayerGuessResult[] = [];
+    const isBattleRoyale = room.settings.gameMode === 'battle_royale';
+
+    let minDistanceMeters = Infinity;
+    for (const player of room.players.values()) {
+      if (player.isEliminated) continue;
+      const locked = round.lockedGuesses.get(player.id);
+      const draft = round.draftPins.get(player.id);
+      const chosen = locked ?? draft ?? null;
+      if (chosen) {
+        const d = haversineDistanceMeters(
+          actualLat,
+          actualLng,
+          chosen.lat,
+          chosen.lng,
+        );
+        if (d < minDistanceMeters) {
+          minDistanceMeters = d;
+        }
+      }
+    }
+    const bestDistanceMeters = Number.isFinite(minDistanceMeters)
+      ? minDistanceMeters
+      : 0;
 
     for (const player of room.players.values()) {
       const locked = round.lockedGuesses.get(player.id);
@@ -766,6 +990,7 @@ export class RoomManager {
       let score = 0;
       let timeTakenMs: number | null = null;
       let timedOut = false;
+      let damageTaken = 0;
 
       if (chosen) {
         distanceMeters = haversineDistanceMeters(
@@ -787,6 +1012,22 @@ export class RoomManager {
         timedOut = true;
       }
 
+      if (isBattleRoyale) {
+        if (!player.isEliminated) {
+          if (distanceMeters !== null) {
+            const diffKm = Math.max(
+              0,
+              (distanceMeters - bestDistanceMeters) / 1000,
+            );
+            damageTaken = Math.min(player.hp, Math.round(diffKm * 2.5));
+          } else {
+            damageTaken = Math.min(player.hp, 4000);
+          }
+          player.hp = Math.max(0, player.hp - damageTaken);
+          player.isEliminated = player.hp <= 0;
+        }
+      }
+
       player.totalScore += score;
       player.lastRoundScore = score;
 
@@ -801,10 +1042,25 @@ export class RoomManager {
         totalScore: player.totalScore,
         timeTakenMs,
         timedOut,
+        damageTaken,
+        remainingHp: player.hp,
+        isEliminated: player.isEliminated,
       });
     }
 
-    guesses.sort((a, b) => b.score - a.score || (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+    guesses.sort((a, b) => {
+      if (isBattleRoyale) {
+        return (
+          (b.remainingHp ?? 0) - (a.remainingHp ?? 0) ||
+          b.score - a.score ||
+          (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity)
+        );
+      }
+      return (
+        b.score - a.score ||
+        (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity)
+      );
+    });
 
     const result: RoundResult = {
       roundNumber: round.roundNumber,
@@ -815,6 +1071,7 @@ export class RoomManager {
         imageId: round.location.imageId,
         isPano: round.location.isPano,
         countryName: round.location.countryName,
+        capturedAtYear: round.location.capturedAtYear,
       },
       mapDiagonalMeters: round.mapDiagonalMeters,
       guesses,

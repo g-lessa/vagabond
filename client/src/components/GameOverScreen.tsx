@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Award, RotateCcw, Trophy } from 'lucide-react';
+import {
+  Award,
+  Check,
+  Copy,
+  Plane,
+  RotateCcw,
+  Trophy,
+} from 'lucide-react';
 import type { RoomState } from '@shared/types';
 import { formatDistance } from '@shared/scoring';
 import { ResultsMap } from './ResultsMap';
@@ -19,14 +26,22 @@ export function GameOverScreen({
 }: GameOverScreenProps) {
   const me = room.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
+  const isBattleRoyale = room.settings.gameMode === 'battle_royale';
   const [selectedRound, setSelectedRound] = useState<number | 'all'>('all');
   const [resetting, setResetting] = useState(false);
+  const [copiedSummary, setCopiedSummary] = useState(false);
 
-  const standings = useMemo(
-    () =>
-      [...room.players].sort((a, b) => b.totalScore - a.totalScore),
-    [room.players],
-  );
+  const standings = useMemo(() => {
+    return [...room.players].sort((a, b) => {
+      if (isBattleRoyale) {
+        return (
+          b.hp - a.hp ||
+          b.totalScore - a.totalScore
+        );
+      }
+      return b.totalScore - a.totalScore;
+    });
+  }, [room.players, isBattleRoyale]);
 
   const mapRounds = useMemo(() => {
     if (selectedRound === 'all') return room.roundHistory;
@@ -35,12 +50,106 @@ export function GameOverScreen({
 
   const maxPossible = room.settings.roundsCount * 5000;
 
+  // Itinerary & Stats for Passport
+  const visitedCountries = useMemo(() => {
+    const names = room.roundHistory
+      .map((r) => r.actual.countryName)
+      .filter((c): c is string => Boolean(c));
+    return names.length > 0 ? names : ['Global Wilds'];
+  }, [room.roundHistory]);
+
+  const myGuesses = useMemo(() => {
+    return room.roundHistory
+      .map((r) => r.guesses.find((g) => g.playerId === playerId))
+      .filter(Boolean);
+  }, [room.roundHistory, playerId]);
+
+  const myTotalDistanceMeters = useMemo(() => {
+    return myGuesses.reduce((acc, g) => acc + (g?.distanceMeters ?? 0), 0);
+  }, [myGuesses]);
+
+  // Unlocked Passport Stamps
+  const stamps = useMemo(() => {
+    const list: Array<{ id: string; emoji: string; title: string; desc: string }> = [];
+    const bestDistance = Math.min(
+      ...myGuesses.map((g) => g?.distanceMeters ?? Infinity),
+    );
+    if (bestDistance <= 25_000) {
+      list.push({
+        id: 'sniper',
+        emoji: '🎯',
+        title: 'Deadly Accurate',
+        desc: 'Pinpointed within 25 km of actual street drop!',
+      });
+    }
+    if (new Set(visitedCountries).size >= 3) {
+      list.push({
+        id: 'explorer',
+        emoji: '🗺️',
+        title: 'World Explorer',
+        desc: 'Explored 3 or more distinct territories.',
+      });
+    }
+    if (standings[0]?.id === playerId) {
+      list.push({
+        id: 'champion',
+        emoji: '👑',
+        title: 'Grand Champion',
+        desc: '#1 podium finish in this match!',
+      });
+    }
+    if (isBattleRoyale && !me?.isEliminated) {
+      list.push({
+        id: 'survivor',
+        emoji: '💀',
+        title: 'Apex Survivor',
+        desc: 'Survived the Battle Royale knockout mode!',
+      });
+    }
+    const fastestGuessMs = Math.min(
+      ...myGuesses.map((g) => g?.timeTakenMs ?? Infinity),
+    );
+    if (fastestGuessMs < 12_000) {
+      list.push({
+        id: 'speed',
+        emoji: '⚡',
+        title: 'Lightning Reflexes',
+        desc: 'Submitted a guess in under 12 seconds.',
+      });
+    }
+    return list;
+  }, [myGuesses, visitedCountries, standings, playerId, isBattleRoyale, me]);
+
   async function handlePlayAgain() {
     setResetting(true);
     try {
       await onPlayAgain();
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function handleCopySummary() {
+    const winner = standings[0];
+    const text = [
+      `🧭 Vagabond Travel Boarding Pass (Room ${room.code})`,
+      `🏆 Winner: ${winner?.name ?? 'Traveler'} (${isBattleRoyale ? `${winner?.hp.toLocaleString()} HP remaining` : `${winner?.totalScore.toLocaleString()} pts`})`,
+      `✈️ Route: ${visitedCountries.join(' ➔ ')}`,
+      `📏 Total Travel: ${formatDistance(myTotalDistanceMeters)}`,
+      stamps.length > 0
+        ? `🎖️ Passport Stamps: ${stamps.map((s) => `${s.emoji} ${s.title}`).join(', ')}`
+        : '',
+      `🎮 Vagabond — Free Self-Hosted Street Explorer`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 2000);
+    } catch {
+      // clipboard failure fallback
     }
   }
 
@@ -54,7 +163,7 @@ export function GameOverScreen({
         <div className="results-header-bar">
           <div>
             <div className="field-hint">
-              Match Complete · {room.settings.roundsCount} Rounds
+              Match Complete · {room.settings.roundsCount} Rounds · {isBattleRoyale ? 'Battle Royale' : 'Classic Mode'}
             </div>
             <h1
               id="final-standings-heading"
@@ -67,11 +176,20 @@ export function GameOverScreen({
               }}
             >
               <Trophy size={24} style={{ color: '#fbbf24' }} aria-hidden="true" />
-              Final Podium &amp; Match Breakdown
+              Final Podium &amp; Travel Recap
             </h1>
           </div>
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={handleCopySummary}
+              title="Copy boarding pass & summary to clipboard"
+            >
+              {copiedSummary ? <Check size={16} /> : <Copy size={16} />}
+              {copiedSummary ? 'Copied Summary!' : 'Share Boarding Pass'}
+            </button>
             {isHost ? (
               <button
                 type="button"
@@ -91,6 +209,69 @@ export function GameOverScreen({
               Leave Room
             </button>
           </div>
+        </div>
+
+        {/* Travel Itinerary / Boarding Pass Card */}
+        <div className="boarding-pass-card">
+          <div className="boarding-pass-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Plane size={18} style={{ color: 'var(--accent-secondary)' }} aria-hidden="true" />
+              <span style={{ fontWeight: 800, letterSpacing: '0.05em' }}>
+                VAGABOND AIRWAYS · FLIGHT #VGB-{room.code}
+              </span>
+            </div>
+            <span className="badge badge--success" style={{ fontSize: '0.75rem' }}>
+              BOARDING PASS
+            </span>
+          </div>
+
+          <div className="boarding-pass-body">
+            <div className="boarding-pass-item">
+              <span className="boarding-pass-label">PASSENGER</span>
+              <span className="boarding-pass-val">{me?.name ?? 'Traveler'}</span>
+            </div>
+            <div className="boarding-pass-item">
+              <span className="boarding-pass-label">FLIGHT PATH</span>
+              <span className="boarding-pass-val" style={{ fontSize: '0.9rem' }}>
+                {visitedCountries.join(' ➔ ')}
+              </span>
+            </div>
+            <div className="boarding-pass-item">
+              <span className="boarding-pass-label">TOTAL DISTANCE</span>
+              <span className="boarding-pass-val tabular-nums">
+                {formatDistance(myTotalDistanceMeters)}
+              </span>
+            </div>
+            <div className="boarding-pass-item">
+              <span className="boarding-pass-label">FINAL OUTCOME</span>
+              <span className="boarding-pass-val tabular-nums" style={{ color: 'var(--accent-primary)' }}>
+                {isBattleRoyale
+                  ? me?.isEliminated
+                    ? '💀 Eliminated'
+                    : `${(me?.hp ?? 0).toLocaleString()} HP Left`
+                  : `${(me?.totalScore ?? 0).toLocaleString()} pts`}
+              </span>
+            </div>
+          </div>
+
+          {/* Unlocked Passport Stamps */}
+          {stamps.length > 0 ? (
+            <div className="passport-stamps-bar">
+              <span className="field-hint" style={{ fontWeight: 700, marginInlineEnd: '0.4rem' }}>
+                Passport Stamps:
+              </span>
+              {stamps.map((s) => (
+                <span
+                  key={s.id}
+                  className="passport-stamp-badge"
+                  title={`${s.title}: ${s.desc}`}
+                >
+                  <span aria-hidden="true">{s.emoji}</span>
+                  <span>{s.title}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {/* Round Map Filter Pills */}
@@ -126,7 +307,7 @@ export function GameOverScreen({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className="badge">
                   <Award size={13} aria-hidden="true" />
-                  #{idx + 1} Place
+                  #{idx + 1} {idx === 0 ? (isBattleRoyale ? 'Survivor' : 'Winner') : 'Place'}
                 </span>
                 <span
                   className="player-avatar"
@@ -140,10 +321,19 @@ export function GameOverScreen({
                 {p.name}
                 {p.id === playerId ? ' (You)' : ''}
               </div>
-              <div className="tabular-nums" style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--accent-primary)' }}>
-                {p.totalScore.toLocaleString('en-US')}{' '}
-                <span className="field-hint">/ {maxPossible.toLocaleString('en-US')}</span>
-              </div>
+              {isBattleRoyale ? (
+                <div className="tabular-nums" style={{ fontSize: '1.2rem', fontWeight: 900, color: p.isEliminated ? '#ef4444' : '#10b981' }}>
+                  {p.isEliminated ? '💀 Eliminated' : `${p.hp.toLocaleString()} HP`}
+                  <div className="field-hint" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {p.totalScore.toLocaleString()} points
+                  </div>
+                </div>
+              ) : (
+                <div className="tabular-nums" style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--accent-primary)' }}>
+                  {p.totalScore.toLocaleString('en-US')}{' '}
+                  <span className="field-hint">/ {maxPossible.toLocaleString('en-US')}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
