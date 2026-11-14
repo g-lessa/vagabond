@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="$HOME/.local/node/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.local/node/bin:$PATH"
 
 if ! command -v node >/dev/null 2>&1; then
   echo "Error: Node.js not found. Please install Node.js 20+ or add ~/.local/node/bin to PATH."

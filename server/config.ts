@@ -153,6 +153,15 @@ export function isLoopbackRequest(req: Request): boolean {
 }
 
 function findBinary(name: string): boolean {
+  const customPaths = [
+    path.join(os.homedir(), '.local', 'bin', name),
+    path.join(os.homedir(), '.local', 'node', 'bin', name),
+    path.join('/opt', 'homebrew', 'bin', name),
+    path.join('/usr', 'local', 'bin', name),
+  ];
+  for (const p of customPaths) {
+    if (fs.existsSync(p)) return true;
+  }
   try {
     execFileSync('which', [name], { stdio: 'ignore' });
     return true;
@@ -203,7 +212,12 @@ class TunnelManager {
     port: number,
   ): Promise<{ url: string; provider: 'cloudflared' }> {
     return new Promise((resolve, reject) => {
-      const child = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${port}`], {
+      const bin = findBinary('cloudflared')
+        ? (fs.existsSync(path.join(os.homedir(), '.local', 'bin', 'cloudflared'))
+            ? path.join(os.homedir(), '.local', 'bin', 'cloudflared')
+            : 'cloudflared')
+        : 'cloudflared';
+      const child = spawn(bin, ['tunnel', '--url', `http://127.0.0.1:${port}`], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       this.proc = child;
