@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Compass, KeyRound, Moon, Sun, Wifi, WifiOff } from 'lucide-react';
+import { KeyRound, Moon, Sun, Wifi, WifiOff } from 'lucide-react';
 import { useVagabondClient } from './hooks/useSocket';
 import {
   applyTheme,
@@ -15,6 +15,7 @@ import { GamePlayScreen } from './components/GamePlayScreen';
 import { RoundResultScreen } from './components/RoundResultScreen';
 import { GameOverScreen } from './components/GameOverScreen';
 import { TokenDialog } from './components/TokenDialog';
+import { VagabondLogo } from './components/VagabondLogo';
 
 export function App() {
   const {
@@ -39,6 +40,7 @@ export function App() {
     submitGuess,
     nextRound,
     playAgain,
+    terminateGame,
     kickPlayer,
     sendEmoji,
     usePowerUp,
@@ -86,10 +88,7 @@ export function App() {
       {!isPlaying ? (
         <header className="top-nav">
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              <Compass size={20} />
-            </span>
-            <span>Vagabond</span>
+            <VagabondLogo size={28} variant="full" />
           </div>
 
           <div className="top-nav-actions">
@@ -181,6 +180,7 @@ export function App() {
             onUsePowerUp={usePowerUp}
             onDraftPin={sendDraftPin}
             onSubmitGuess={submitGuess}
+            onReturnToLobby={terminateGame}
           />
         )
       ) : roomState.phase === 'round_result' ? (
@@ -189,6 +189,7 @@ export function App() {
           playerId={playerId}
           muted={muted}
           onNextRound={nextRound}
+          onReturnToLobby={terminateGame}
         />
       ) : (
         <GameOverScreen

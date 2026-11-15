@@ -59,7 +59,10 @@ export function KartaViewViewer({
     setLoading(true);
     setError(null);
 
-    const gl = canvas.getContext('webgl', { alpha: false, antialias: true });
+    const gl =
+      (canvas.getContext('webgl2', { alpha: false, antialias: true }) as WebGLRenderingContext | null) ||
+      (canvas.getContext('webgl', { alpha: false, antialias: true }) as WebGLRenderingContext | null);
+
     if (!gl) {
       setError('WebGL is not supported in this browser.');
       setLoading(false);
@@ -83,7 +86,7 @@ export function KartaViewViewer({
       uniform float u_pitch;
       uniform float u_fov;
       uniform float u_aspect;
-      #define PI 3.14159265359
+      #define PI 3.141592653589793
 
       void main() {
         vec2 p = (v_uv - 0.5) * 2.0;
@@ -102,8 +105,10 @@ export function KartaViewViewer({
         float phi = atan(r2.x, r2.z);
         float theta = asin(clamp(r2.y, -0.999, 0.999));
 
-        vec2 texCoord = vec2((phi / (2.0 * PI)) + 0.5, 0.5 - (theta / PI));
-        gl_FragColor = texture2D(u_tex, texCoord);
+        // Seamless 360 wrap without NPOT hardware repeat restrictions
+        float u = fract((phi / (2.0 * PI)) + 0.5);
+        float v = clamp(0.5 - (theta / PI), 0.001, 0.999);
+        gl_FragColor = texture2D(u_tex, vec2(u, v));
       }
     `;
 
@@ -135,24 +140,46 @@ export function KartaViewViewer({
     const tex = gl.createTexture();
     const img = new Image();
     img.crossOrigin = 'anonymous';
+
     img.onload = () => {
       if (disposed) return;
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        img,
-      );
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      setLoading(false);
+      try {
+        const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 2048;
+        // Standard power-of-two texture dimensions (2048x1024) ensure universal WebGL compatibility
+        const targetW = Math.min(maxTex >= 4096 ? 4096 : 2048, maxTex);
+        const targetH = Math.round(targetW / 2);
+
+        const offscreen = document.createElement('canvas');
+        offscreen.width = targetW;
+        offscreen.height = targetH;
+        const ctx = offscreen.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+        }
+
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          offscreen,
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        setLoading(false);
+      } catch (e) {
+        if (!disposed) {
+          setError('Failed to upload panorama texture to WebGL.');
+          setLoading(false);
+        }
+      }
     };
+
     img.onerror = () => {
       if (!disposed) {
         setError('Failed to load KartaView street imagery.');
@@ -168,24 +195,39 @@ export function KartaViewViewer({
 
     const render = () => {
       if (disposed) return;
-      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
-        gl.viewport(0, 0, canvas.width, canvas.height);
+      const width = canvas.clientWidth || window.innerWidth;
+      const height = canvas.clientHeight || window.innerHeight;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        gl.viewport(0, 0, width, height);
       }
 
       gl.uniform1f(uYaw, yawRef.current);
       gl.uniform1f(uPitch, pitchRef.current);
       gl.uniform1f(uFov, fovRef.current);
-      gl.uniform1f(uAspect, canvas.height > 0 ? canvas.width / canvas.height : 1.0);
+      gl.uniform1f(uAspect, height > 0 ? width / height : 1.0);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       animId = requestAnimationFrame(render);
     };
     animId = requestAnimationFrame(render);
 
+    // Watch for parent resize
+    const ro = new ResizeObserver(() => {
+      if (!disposed) {
+        const width = canvas.clientWidth || window.innerWidth;
+        const height = canvas.clientHeight || window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        gl.viewport(0, 0, width, height);
+      }
+    });
+    ro.observe(canvas);
+
     return () => {
       disposed = true;
+      ro.disconnect();
       cancelAnimationFrame(animId);
       gl.deleteTexture(tex);
       gl.deleteBuffer(quadBuf);
@@ -206,16 +248,17 @@ export function KartaViewViewer({
     const dy = e.clientY - lastMousePosRef.current.y;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
 
-    const sensitivity = (fovRef.current / 75) * 0.0035;
-    yawRef.current -= dx * sensitivity;
+    const speed = 0.003 * (fovRef.current / 75);
+    yawRef.current -= dx * speed;
     pitchRef.current = Math.max(
-      -1.4,
-      Math.min(1.4, pitchRef.current + dy * sensitivity),
+      -Math.PI / 2.3,
+      Math.min(Math.PI / 2.3, pitchRef.current + dy * speed),
     );
 
-    const deg = ((-yawRef.current * 180) / Math.PI) % 360;
-    const normDeg = deg < 0 ? deg + 360 : deg;
-    onBearingChange(normDeg);
+    // Normalize bearing to 0-360 degrees
+    let deg = ((yawRef.current * 180) / Math.PI) % 360;
+    if (deg < 0) deg += 360;
+    onBearingChange(deg);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -229,14 +272,21 @@ export function KartaViewViewer({
 
   const onWheel = (e: React.WheelEvent) => {
     if (!allowZooming) return;
-    fovRef.current = Math.max(25, Math.min(105, fovRef.current + e.deltaY * 0.05));
+    e.preventDefault();
+    const zoomSpeed = 0.05;
+    fovRef.current = Math.max(
+      30,
+      Math.min(105, fovRef.current + e.deltaY * zoomSpeed),
+    );
   };
 
   return (
     <div
       ref={containerRef}
+      className="panorama-host"
       style={{
-        position: 'relative',
+        position: 'absolute',
+        inset: 0,
         inlineSize: '100%',
         blockSize: '100%',
         overflow: 'hidden',
@@ -247,6 +297,8 @@ export function KartaViewViewer({
         <canvas
           ref={canvasRef}
           style={{
+            position: 'absolute',
+            inset: 0,
             inlineSize: '100%',
             blockSize: '100%',
             display: 'block',
@@ -262,6 +314,8 @@ export function KartaViewViewer({
       ) : photoUrl ? (
         <div
           style={{
+            position: 'absolute',
+            inset: 0,
             inlineSize: '100%',
             blockSize: '100%',
             display: 'grid',
@@ -294,12 +348,12 @@ export function KartaViewViewer({
             inset: 0,
             display: 'grid',
             placeItems: 'center',
-            background: 'rgba(2, 6, 23, 0.55)',
+            background: 'rgba(2, 6, 23, 0.65)',
             pointerEvents: 'none',
             zIndex: 420,
           }}
         >
-          <div className="hud-pill">Loading KartaView Imagery…</div>
+          <div className="hud-pill">Loading KartaView 360° Imagery…</div>
         </div>
       ) : null}
 

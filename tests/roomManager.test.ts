@@ -258,4 +258,46 @@ describe('RoomManager multiplayer state machine', () => {
     const radarAgain = manager.usePowerUp('sock-h', code, 'radar');
     expect(radarAgain.ok).toBe(false);
   });
+
+  it('allows the host to terminate an active match and return all players to the lobby', async () => {
+    vi.spyOn(configModule, 'getMapillaryToken').mockReturnValue('MLY|test-token');
+
+    const manager = new RoomManager(async () => ({
+      imageId: 'img-term',
+      lat: 51.5074,
+      lng: -0.1278,
+      isPano: true,
+      compassAngle: 45,
+      sequenceId: 'seq-term',
+      countryName: 'United Kingdom',
+    }));
+
+    const { io } = createMockIO();
+    manager.attachIO(io);
+
+    const created = manager.createRoom('sock-host', 'p-host', 'HostPlayer');
+    const code = created.roomCode;
+    manager.joinRoom('sock-guest', code, 'p-guest', 'GuestPlayer');
+
+    // Start match
+    await manager.startGame('sock-host', code);
+    expect(manager.getRoomState(code)?.phase).toBe('playing');
+    expect(manager.getRoomState(code)?.currentRound).not.toBeNull();
+
+    // Guest cannot terminate match
+    const guestTerm = manager.terminateGame('sock-guest', code);
+    expect(guestTerm.ok).toBe(false);
+    expect(manager.getRoomState(code)?.phase).toBe('playing');
+
+    // Host terminates match
+    const hostTerm = manager.terminateGame('sock-host', code);
+    expect(hostTerm.ok).toBe(true);
+
+    const lobbyState = manager.getRoomState(code)!;
+    expect(lobbyState.phase).toBe('lobby');
+    expect(lobbyState.currentRound).toBeNull();
+    expect(lobbyState.currentRoundResult).toBeNull();
+    expect(lobbyState.roundHistory).toHaveLength(0);
+    expect(lobbyState.players.every((p) => p.totalScore === 0)).toBe(true);
+  });
 });

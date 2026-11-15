@@ -86,10 +86,11 @@ export async function spawnKartaViewLocation(
     let lng: number;
 
     // Use a known seed on the first few attempts if available
-    if (attempt < validSeeds.length && Math.random() < 0.7) {
-      const seed = validSeeds[attempt % validSeeds.length];
-      lat = seed[0] + (Math.random() - 0.5) * 0.15;
-      lng = seed[1] + (Math.random() - 0.5) * 0.15;
+    if (attempt < validSeeds.length || Math.random() < 0.6) {
+      const seed = validSeeds[attempt % validSeeds.length] ?? [40.758, -73.9855];
+      // Jitter by at most 0.003 (~300m) so it stays within the 500m radius of captured road imagery
+      lat = seed[0] + (Math.random() - 0.5) * 0.004;
+      lng = seed[1] + (Math.random() - 0.5) * 0.004;
     } else {
       lat = randomInRange(bounds.south, bounds.north);
       lng = randomInRange(bounds.west, bounds.east);
@@ -99,7 +100,8 @@ export async function spawnKartaViewLocation(
       continue;
     }
 
-    const radius = 25000;
+    // KartaView V2 API strictly requires radius in [1, 500] meters
+    const radius = 500;
     const url = `https://api.kartaview.org/2.0/photo/?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&radius=${radius}`;
 
     try {

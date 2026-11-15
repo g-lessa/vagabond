@@ -520,6 +520,13 @@ export class RoomManager {
     return { ok: true };
   }
 
+  terminateGame(
+    socketId: string,
+    roomCode: string,
+  ): { ok: boolean; error?: string } {
+    return this.playAgain(socketId, roomCode);
+  }
+
   kickPlayer(
     socketId: string,
     roomCode: string,

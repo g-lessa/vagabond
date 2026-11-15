@@ -197,6 +197,10 @@ export interface ClientToServerEvents {
     payload: { roomCode: string },
     ack?: (res: AckResult) => void,
   ) => void;
+  'room:terminateGame': (
+    payload: { roomCode: string },
+    ack?: (res: AckResult) => void,
+  ) => void;
   'room:kickPlayer': (
     payload: { roomCode: string; targetPlayerId: string },
     ack?: (res: AckResult) => void,

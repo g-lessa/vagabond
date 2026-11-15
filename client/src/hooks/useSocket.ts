@@ -332,6 +332,19 @@ export function useVagabondClient() {
     });
   }, [roomState]);
 
+  const terminateGame = useCallback((): Promise<{ ok: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      const sock = socketRef.current;
+      if (!sock || !roomState) {
+        resolve({ ok: false, error: 'Not in a room.' });
+        return;
+      }
+      sock.emit('room:terminateGame', { roomCode: roomState.code }, (res) =>
+        resolve(res ?? { ok: true }),
+      );
+    });
+  }, [roomState]);
+
   const kickPlayer = useCallback(
     (targetPlayerId: string) => {
       if (!socketRef.current || !roomState) return;
@@ -417,6 +430,7 @@ export function useVagabondClient() {
     submitGuess,
     nextRound,
     playAgain,
+    terminateGame,
     kickPlayer,
     sendEmoji,
     usePowerUp,

@@ -5,11 +5,11 @@ import {
   Copy,
   Plane,
   RotateCcw,
-  Trophy,
 } from 'lucide-react';
 import type { RoomState } from '@shared/types';
 import { formatDistance } from '@shared/scoring';
 import { ResultsMap } from './ResultsMap';
+import { VagabondLogo } from './VagabondLogo';
 
 interface GameOverScreenProps {
   room: RoomState;
@@ -175,7 +175,7 @@ export function GameOverScreen({
                 gap: '0.55rem',
               }}
             >
-              <Trophy size={24} style={{ color: '#fbbf24' }} aria-hidden="true" />
+              <VagabondLogo size={24} variant="icon" />
               Final Podium &amp; Travel Recap
             </h1>
           </div>

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Camera,
   ExternalLink,
+  LogOut,
   MapPin,
   Trophy,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ interface RoundResultScreenProps {
   playerId: string;
   muted: boolean;
   onNextRound: () => Promise<{ ok: boolean; error?: string }>;
+  onReturnToLobby?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 export function RoundResultScreen({
@@ -27,6 +29,7 @@ export function RoundResultScreen({
   playerId,
   muted,
   onNextRound,
+  onReturnToLobby,
 }: RoundResultScreenProps) {
   const result = room.currentRoundResult;
   const me = room.players.find((p) => p.id === playerId);
@@ -34,6 +37,7 @@ export function RoundResultScreen({
   const isBattleRoyale = room.settings.gameMode === 'battle_royale';
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  const [terminating, setTerminating] = useState(false);
 
   useEffect(() => {
     if (result) {
@@ -120,26 +124,51 @@ export function RoundResultScreen({
             </a>
 
             {isHost ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                style={{ minBlockSize: '44px', paddingInline: '1.25rem' }}
-                disabled={advancing || Boolean(room.spawningStatus)}
-                onClick={handleNext}
-              >
-                {isFinalRound ? (
-                  <>
-                    <Trophy size={17} aria-hidden="true" />
-                    View Final Standings
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight size={17} aria-hidden="true" />
-                    {room.spawningStatus ??
-                      `Next Round (${result.roundNumber + 1}/${result.totalRounds})`}
-                  </>
-                )}
-              </button>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    minBlockSize: '44px',
+                    paddingInline: '0.9rem',
+                    color: '#fca5a5',
+                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                  }}
+                  disabled={terminating || advancing}
+                  onClick={async () => {
+                    setTerminating(true);
+                    try {
+                      await onReturnToLobby?.();
+                    } finally {
+                      setTerminating(false);
+                    }
+                  }}
+                  title="End match early and return to lobby"
+                >
+                  <LogOut size={16} aria-hidden="true" />
+                  {terminating ? 'Ending…' : 'End Match'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  style={{ minBlockSize: '44px', paddingInline: '1.25rem' }}
+                  disabled={advancing || terminating || Boolean(room.spawningStatus)}
+                  onClick={handleNext}
+                >
+                  {isFinalRound ? (
+                    <>
+                      <Trophy size={17} aria-hidden="true" />
+                      View Final Standings
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight size={17} aria-hidden="true" />
+                      {room.spawningStatus ??
+                        `Next Round (${result.roundNumber + 1}/${result.totalRounds})`}
+                    </>
+                  )}
+                </button>
+              </div>
             ) : (
               <span className="badge" role="status">
                 {room.spawningStatus ?? 'Waiting for host to continue…'}

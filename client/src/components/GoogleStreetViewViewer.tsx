@@ -29,7 +29,6 @@ function loadGoogleMapsScript(key: string): Promise<void> {
   }
 
   window.__googleMapsLoadingPromise = new Promise((resolve, reject) => {
-    // Check if script element already exists
     const existing = document.querySelector('script[src*="maps.googleapis.com"]');
     if (existing) {
       existing.addEventListener('load', () => resolve());
@@ -124,6 +123,13 @@ export function GoogleStreetViewViewer({
 
         panoramaRef.current = panorama;
 
+        // Force resize trigger after container layout
+        setTimeout(() => {
+          if (!disposed && window.google?.maps?.event) {
+            window.google.maps.event.trigger(panorama, 'resize');
+          }
+        }, 150);
+
         const povListener = panorama.addListener('pov_changed', () => {
           if (disposed) return;
           const currentPov = panorama.getPov();
@@ -145,17 +151,24 @@ export function GoogleStreetViewViewer({
           const status = panorama.getStatus();
           setLoading(false);
           if (status !== 'OK') {
-            setError(`Google Street View returned status: ${status}`);
+            setError(`Google Street View returned status: ${status}. Ensure Street View Static API & Maps JavaScript API are enabled for your key.`);
           }
         });
 
-        // Fallback to remove loader
+        const ro = new ResizeObserver(() => {
+          if (!disposed && window.google?.maps?.event && panoramaRef.current) {
+            window.google.maps.event.trigger(panoramaRef.current, 'resize');
+          }
+        });
+        ro.observe(el);
+
         const timeout = setTimeout(() => {
           if (!disposed) setLoading(false);
         }, 3000);
 
         return () => {
           clearTimeout(timeout);
+          ro.disconnect();
           window.google.maps.event.removeListener(povListener);
           window.google.maps.event.removeListener(panoListener);
           window.google.maps.event.removeListener(statusListener);
@@ -188,10 +201,26 @@ export function GoogleStreetViewViewer({
 
   return (
     <div
-      style={{ position: 'relative', inlineSize: '100%', blockSize: '100%' }}
+      className="panorama-host"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        inlineSize: '100%',
+        blockSize: '100%',
+        overflow: 'hidden',
+        background: '#090e1a',
+      }}
       onWheel={!allowZooming ? (e) => e.stopPropagation() : undefined}
     >
-      <div ref={containerRef} className="panorama-host" />
+      <div
+        ref={containerRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          inlineSize: '100%',
+          blockSize: '100%',
+        }}
+      />
 
       {!allowPanning ? (
         <div
@@ -217,7 +246,7 @@ export function GoogleStreetViewViewer({
             inset: 0,
             display: 'grid',
             placeItems: 'center',
-            background: 'rgba(2, 6, 23, 0.55)',
+            background: 'rgba(2, 6, 23, 0.65)',
             pointerEvents: 'none',
             zIndex: 420,
           }}
@@ -235,6 +264,7 @@ export function GoogleStreetViewViewer({
             insetBlockEnd: '5rem',
             insetInlineStart: '1rem',
             zIndex: 460,
+            maxWidth: '480px',
           }}
         >
           <span>{error}</span>

@@ -249,6 +249,11 @@ export function createVagabondServer(options: AppInstanceOptions = {}) {
       ack?.(res);
     });
 
+    socket.on('room:terminateGame', ({ roomCode }, ack) => {
+      const res = manager.terminateGame(socket.id, roomCode);
+      ack?.(res);
+    });
+
     socket.on('room:kickPlayer', ({ roomCode, targetPlayerId }, ack) => {
       const res = manager.kickPlayer(socket.id, roomCode, targetPlayerId);
       ack?.(res);

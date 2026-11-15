@@ -4,6 +4,7 @@ import {
   Clock,
   Heart,
   Infinity as InfinityIcon,
+  LogOut,
   RotateCcw,
   ShieldAlert,
   Sparkles,
@@ -28,6 +29,7 @@ import {
 } from '../lib/sound';
 import { StreetViewer } from './StreetViewer';
 import { GuessMinimap } from './GuessMinimap';
+import { ModalDialog } from './ModalDialog';
 
 interface GamePlayScreenProps {
   room: RoomState;
@@ -61,6 +63,7 @@ interface GamePlayScreenProps {
     lat: number,
     lng: number,
   ) => Promise<{ ok: boolean; error?: string }>;
+  onReturnToLobby?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 const EMOJI_OPTIONS = ['😱', '📍', '🤡', '🚀', '💀', '🎉', '🔥', '❤️'];
@@ -87,12 +90,16 @@ export function GamePlayScreen({
   onUsePowerUp,
   onDraftPin,
   onSubmitGuess,
+  onReturnToLobby,
 }: GamePlayScreenProps) {
   const round = room.currentRound;
   const me = room.players.find((p) => p.id === playerId);
   const isEliminated = Boolean(me?.isEliminated);
   const hasGuessed = Boolean(me?.hasGuessedCurrentRound) || isEliminated;
   const isBattleRoyale = round?.gameMode === 'battle_royale';
+
+  const [confirmTerminateOpen, setConfirmTerminateOpen] = useState(false);
+  const [terminating, setTerminating] = useState(false);
 
   const [bearing, setBearing] = useState(0);
   const [movedFromStart, setMovedFromStart] = useState(false);
@@ -484,6 +491,31 @@ export function GamePlayScreen({
                 <Volume2 size={16} aria-hidden="true" />
               )}
             </button>
+
+            {me?.isHost ? (
+              <button
+                type="button"
+                className="hud-pill"
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  minBlockSize: '32px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  borderColor: 'rgba(239, 68, 68, 0.5)',
+                  color: '#fca5a5',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                }}
+                onClick={() => setConfirmTerminateOpen(true)}
+                title="End match and return everyone to lobby"
+              >
+                <LogOut size={13} aria-hidden="true" />
+                End Match
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -665,6 +697,45 @@ export function GamePlayScreen({
         onPinChange={handlePinChange}
         onSubmitGuess={() => void handleSubmit()}
       />
+
+      {confirmTerminateOpen ? (
+        <ModalDialog
+          open={confirmTerminateOpen}
+          onClose={() => setConfirmTerminateOpen(false)}
+          title="End Game & Return to Lobby?"
+        >
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+            Are you sure you want to end this match early? The current round will stop and all players will immediately be returned to the main lobby.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', marginBlockStart: '1rem' }}>
+            <button
+              type="button"
+              className="btn"
+              disabled={terminating}
+              onClick={() => setConfirmTerminateOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              disabled={terminating}
+              onClick={async () => {
+                setTerminating(true);
+                try {
+                  await onReturnToLobby?.();
+                  setConfirmTerminateOpen(false);
+                } finally {
+                  setTerminating(false);
+                }
+              }}
+            >
+              <LogOut size={15} aria-hidden="true" />
+              {terminating ? 'Ending Match…' : 'Yes, End Match'}
+            </button>
+          </div>
+        </ModalDialog>
+      ) : null}
     </main>
   );
 }

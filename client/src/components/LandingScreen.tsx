@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { getRoomCodeFromUrl, savePlayerName } from '../lib/identity';
 import type { ServerInfoClient } from '../hooks/useSocket';
+import { VagabondLogo } from './VagabondLogo';
 
 interface LandingScreenProps {
   initialName: string;
@@ -66,6 +67,9 @@ export function LandingScreen({
     <main className="landing-main">
       <div className="landing-container">
         <section>
+          <div style={{ marginBlockEnd: '1.25rem' }}>
+            <VagabondLogo size={52} variant="full" />
+          </div>
           <div className="hero-eyebrow">
             <Compass size={16} aria-hidden="true" />
             100% Free &amp; Self-Hosted Street Explorer
