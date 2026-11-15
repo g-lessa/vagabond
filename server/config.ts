@@ -12,6 +12,7 @@ const ENV_PATH = path.resolve(process.cwd(), '.env');
 
 interface PersistedConfig {
   mapillaryAccessToken?: string;
+  googleMapsApiKey?: string;
 }
 
 function readPersistedConfig(): PersistedConfig {
@@ -46,6 +47,77 @@ let cachedToken: string | null =
   readEnvToken() ||
   readPersistedConfig().mapillaryAccessToken?.trim() ||
   null;
+
+function readEnvGoogleKey(): string | null {
+  const fromProc = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (fromProc) return fromProc;
+  try {
+    if (!fs.existsSync(ENV_PATH)) return null;
+    const parsed = dotenv.parse(fs.readFileSync(ENV_PATH, 'utf8'));
+    const fromFile = parsed.GOOGLE_MAPS_API_KEY?.trim();
+    return fromFile || null;
+  } catch {
+    return null;
+  }
+}
+
+let cachedGoogleKey: string | null =
+  readEnvGoogleKey() ||
+  readPersistedConfig().googleMapsApiKey?.trim() ||
+  null;
+
+export function getGoogleKey(): string | null {
+  if (cachedGoogleKey && cachedGoogleKey.length > 0) return cachedGoogleKey;
+  const fresh =
+    readEnvGoogleKey() ||
+    readPersistedConfig().googleMapsApiKey?.trim() ||
+    null;
+  if (fresh) cachedGoogleKey = fresh;
+  return fresh;
+}
+
+export function setGoogleKey(key: string): void {
+  const trimmed = key.trim();
+  cachedGoogleKey = trimmed.length > 0 ? trimmed : null;
+  const existing = readPersistedConfig();
+  if (cachedGoogleKey) {
+    existing.googleMapsApiKey = cachedGoogleKey;
+  } else {
+    delete existing.googleMapsApiKey;
+  }
+  writePersistedConfig(existing);
+}
+
+export async function validateGoogleKey(
+  key: string,
+): Promise<{ valid: boolean; error?: string }> {
+  const trimmed = key.trim();
+  if (!trimmed) {
+    return { valid: false, error: 'Google API key cannot be empty.' };
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/streetview/metadata?location=40.758,-73.985&key=${encodeURIComponent(trimmed)}`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timeout);
+    const data = (await res.json()) as { status?: string; error_message?: string };
+    if (data.status === 'OK' || data.status === 'ZERO_RESULTS') {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      error: data.error_message ?? `Google rejected key (status: ${data.status}).`,
+    };
+  } catch (err) {
+    return {
+      valid: false,
+      error: err instanceof Error ? err.message : 'Network error validating Google key.',
+    };
+  }
+}
 
 export function getMapillaryToken(): string | null {
   if (cachedToken && cachedToken.length > 0) return cachedToken;

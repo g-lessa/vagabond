@@ -20,12 +20,14 @@ import {
   haversineDistanceMeters,
 } from '../shared/scoring.js';
 import { geoCatalog } from './geoCatalog.js';
-import { getMapillaryToken } from './config.js';
+import { getGoogleKey, getMapillaryToken } from './config.js';
 import {
   spawnMapillaryLocation,
   type SpawnedLocation,
   type SpawnRequest,
 } from './mapillarySpawner.js';
+import { spawnKartaViewLocation } from './kartaviewSpawner.js';
+import { spawnGoogleLocation } from './googleSpawner.js';
 
 function createDefaultPowerUps(): Record<PowerUpId, number> {
   return {
@@ -165,6 +167,11 @@ export class RoomManager {
       1000,
       Math.min(30000, Math.round(Number(next.startingHp) || 10000)),
     );
+    next.imageryProvider = ['mapillary', 'kartaview', 'google'].includes(
+      next.imageryProvider,
+    )
+      ? next.imageryProvider
+      : 'mapillary';
     const rawAuto = Math.round(Number(next.autoAdvanceSeconds) || 0);
     next.autoAdvanceSeconds =
       rawAuto <= 0 ? 0 : Math.max(5, Math.min(30, rawAuto));
@@ -193,6 +200,11 @@ export class RoomManager {
         allowZooming: room.settings.allowZooming,
         gameMode: room.settings.gameMode,
         enablePowerUps: room.settings.enablePowerUps,
+        imageryProvider: room.settings.imageryProvider,
+        photoUrl: room.currentRound.location.photoUrl ?? null,
+        googleApiKey:
+          room.settings.imageryProvider === 'google' ? getGoogleKey() : null,
+        googlePanoId: room.currentRound.location.googlePanoId ?? null,
       };
     }
 
@@ -395,12 +407,24 @@ export class RoomManager {
       return { ok: false, error: 'Only the host can start the match.' };
     }
 
-    const token = getMapillaryToken();
-    if (!token) {
-      return {
-        ok: false,
-        error: 'Configure your Mapillary Client Token before starting.',
-      };
+    const provider = room.settings.imageryProvider;
+    if (provider === 'mapillary') {
+      const token = getMapillaryToken();
+      if (!token) {
+        return {
+          ok: false,
+          error: 'Configure your Mapillary Client Token before starting.',
+        };
+      }
+    } else if (provider === 'google') {
+      const gKey = getGoogleKey();
+      if (!gKey) {
+        return {
+          ok: false,
+          error:
+            'Configure your Google Maps API Key before starting Google Street View.',
+        };
+      }
     }
 
     this.clearTimers(room);
@@ -806,12 +830,18 @@ export class RoomManager {
     room: RoomInternal,
     roundNumber: number,
   ): Promise<{ ok: boolean; error?: string }> {
-    const token = getMapillaryToken();
-    if (!token) {
+    const provider = room.settings.imageryProvider;
+    const token = getMapillaryToken() ?? '';
+    const googleKey = getGoogleKey() ?? '';
+
+    if (provider === 'mapillary' && !token) {
       return { ok: false, error: 'Missing Mapillary access token.' };
     }
+    if (provider === 'google' && !googleKey) {
+      return { ok: false, error: 'Missing Google Maps API key.' };
+    }
 
-    room.spawningStatus = `Scouting Round ${roundNumber} location…`;
+    room.spawningStatus = `Scouting Round ${roundNumber} (${provider === 'kartaview' ? 'KartaView' : provider === 'google' ? 'Google' : 'Mapillary'})…`;
     room.errorMessage = null;
     this.broadcastRoom(room);
 
@@ -821,16 +851,20 @@ export class RoomManager {
         location =
           room.prewarmedRound.resolved ?? (await room.prewarmedRound.promise);
       } else {
-        location = await this.spawner(
-          {
-            mapId: room.settings.mapId,
-            customBounds: room.settings.customBounds,
-            only360: room.settings.only360,
-            excludeImageIds: room.usedImageIds,
-            excludeSequenceIds: room.usedSequenceIds,
-          },
-          token,
-        );
+        const req: SpawnRequest = {
+          mapId: room.settings.mapId,
+          customBounds: room.settings.customBounds,
+          only360: room.settings.only360,
+          excludeImageIds: room.usedImageIds,
+          excludeSequenceIds: room.usedSequenceIds,
+        };
+        if (provider === 'kartaview') {
+          location = await spawnKartaViewLocation(req);
+        } else if (provider === 'google') {
+          location = await spawnGoogleLocation(req, googleKey);
+        } else {
+          location = await this.spawner(req, token);
+        }
       }
       room.prewarmedRound = null;
 
@@ -874,18 +908,20 @@ export class RoomManager {
         this.scheduleRoundTimeout(room, endTimeMs);
       }
 
-      this.io?.to(room.code).emit('room:token', { mapillaryToken: token });
+      if (token) {
+        this.io?.to(room.code).emit('room:token', { mapillaryToken: token });
+      }
       this.broadcastRoom(room);
 
       // Background pre-warm for the next round
       if (roundNumber < room.settings.roundsCount) {
-        this.prewarmNextRound(room, roundNumber + 1, token);
+        this.prewarmNextRound(room, roundNumber + 1);
       }
 
       return { ok: true };
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : 'Failed to load Mapillary round.';
+        err instanceof Error ? err.message : `Failed to load ${provider} round.`;
       room.spawningStatus = null;
       room.errorMessage = msg;
       this.broadcastRoom(room);
@@ -896,21 +932,27 @@ export class RoomManager {
   private prewarmNextRound(
     room: RoomInternal,
     nextRoundNumber: number,
-    token: string,
   ): void {
     const excludeImgs = new Set(room.usedImageIds);
     const excludeSeqs = new Set(room.usedSequenceIds);
+    const provider = room.settings.imageryProvider;
+    const token = getMapillaryToken() ?? '';
+    const googleKey = getGoogleKey() ?? '';
 
-    const promise = this.spawner(
-      {
-        mapId: room.settings.mapId,
-        customBounds: room.settings.customBounds,
-        only360: room.settings.only360,
-        excludeImageIds: excludeImgs,
-        excludeSequenceIds: excludeSeqs,
-      },
-      token,
-    );
+    const req: SpawnRequest = {
+      mapId: room.settings.mapId,
+      customBounds: room.settings.customBounds,
+      only360: room.settings.only360,
+      excludeImageIds: excludeImgs,
+      excludeSequenceIds: excludeSeqs,
+    };
+
+    const promise =
+      provider === 'kartaview'
+        ? spawnKartaViewLocation(req)
+        : provider === 'google'
+          ? spawnGoogleLocation(req, googleKey)
+          : this.spawner(req, token);
 
     const entry: RoomInternal['prewarmedRound'] = {
       roundNumber: nextRoundNumber,

@@ -26,7 +26,7 @@ import {
   playPowerUpSound,
   playTimerUrgentTick,
 } from '../lib/sound';
-import { MapillaryViewer } from './MapillaryViewer';
+import { StreetViewer } from './StreetViewer';
 import { GuessMinimap } from './GuessMinimap';
 
 interface GamePlayScreenProps {
@@ -263,9 +263,15 @@ export function GamePlayScreen({
         Round {round.roundNumber} of {round.totalRounds} — {round.mapName}
       </h1>
 
-      <MapillaryViewer
-        accessToken={mapillaryToken}
+      <StreetViewer
+        imageryProvider={round.imageryProvider}
+        mapillaryToken={mapillaryToken}
+        googleApiKey={round.googleApiKey}
         imageId={round.imageId}
+        photoUrl={round.photoUrl}
+        googlePanoId={round.googlePanoId}
+        isPano={round.isPano}
+        compassAngle={round.compassAngle}
         allowMoving={round.allowMoving}
         allowPanning={round.allowPanning}
         allowZooming={round.allowZooming}

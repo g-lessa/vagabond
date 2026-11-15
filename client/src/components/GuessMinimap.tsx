@@ -179,10 +179,13 @@ export function GuessMinimap({
     }
   }, [opponentPins]);
 
+  const TILE_ORDER: TileStyle[] = ['atlas', 'osm', 'satellite', 'topo', 'dark', 'clean'];
+
   function cycleTileStyle() {
-    setTileStyle((prev) =>
-      prev === 'atlas' ? 'osm' : prev === 'osm' ? 'satellite' : 'atlas',
-    );
+    setTileStyle((prev) => {
+      const idx = TILE_ORDER.indexOf(prev);
+      return TILE_ORDER[(idx + 1) % TILE_ORDER.length];
+    });
   }
 
   return (

@@ -1,4 +1,4 @@
-export type TileStyle = 'atlas' | 'osm' | 'satellite';
+export type TileStyle = 'atlas' | 'osm' | 'satellite' | 'topo' | 'dark' | 'clean';
 
 export interface TileLayerConfig {
   label: string;
@@ -29,5 +29,26 @@ export const MAP_TILE_LAYERS: Record<TileStyle, TileLayerConfig> = {
     attribution: 'Tiles &copy; Esri',
     maxNativeZoom: 18,
     maxZoom: 19,
+  },
+  topo: {
+    label: 'Topographic',
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: 'Map data &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap',
+    maxNativeZoom: 17,
+    maxZoom: 18,
+  },
+  dark: {
+    label: 'Dark Matter',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; HERE, Garmin, OpenStreetMap contributors',
+    maxNativeZoom: 16,
+    maxZoom: 18,
+  },
+  clean: {
+    label: 'No Labels',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri',
+    maxNativeZoom: 13,
+    maxZoom: 16,
   },
 };

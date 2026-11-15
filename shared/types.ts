@@ -2,6 +2,8 @@ export type RoomPhase = 'lobby' | 'playing' | 'round_result' | 'game_over';
 
 export type GameMode = 'classic' | 'battle_royale';
 
+export type ImageryProvider = 'mapillary' | 'kartaview' | 'google';
+
 export interface CustomBounds {
   north: number;
   south: number;
@@ -24,6 +26,7 @@ export interface GameSettings {
   gameMode: GameMode;
   startingHp: number;
   enablePowerUps: boolean;
+  imageryProvider: ImageryProvider;
 }
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
@@ -40,6 +43,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   gameMode: 'classic',
   startingHp: 10000,
   enablePowerUps: false,
+  imageryProvider: 'mapillary',
 };
 
 export type PowerUpId = 'radar' | 'hemisphere' | 'mud' | 'peek';
@@ -75,6 +79,10 @@ export interface RoundBrief {
   allowZooming: boolean;
   gameMode: GameMode;
   enablePowerUps: boolean;
+  imageryProvider: ImageryProvider;
+  photoUrl?: string | null;
+  googleApiKey?: string | null;
+  googlePanoId?: string | null;
 }
 
 export interface PlayerGuessResult {
@@ -136,6 +144,7 @@ export interface MapPreset {
 
 export interface ServerPublicInfo {
   hasToken: boolean;
+  hasGoogleKey: boolean;
   lanUrls: string[];
   port: number;
   tunnelUrl: string | null;

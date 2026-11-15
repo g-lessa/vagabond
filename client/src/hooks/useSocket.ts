@@ -46,6 +46,7 @@ export function useVagabondClient() {
   const [maps, setMaps] = useState<MapPreset[]>(CURATED_MAP_PRESETS);
   const [serverInfo, setServerInfo] = useState<ServerInfoClient>({
     hasToken: false,
+    hasGoogleKey: false,
     isLocalHost: false,
     lanUrls: [],
     port: 3000,

@@ -18,6 +18,8 @@ export interface SpawnedLocation {
   sequenceId: string | null;
   countryName: string | null;
   capturedAtYear?: number | null;
+  photoUrl?: string | null;
+  googlePanoId?: string | null;
 }
 
 export interface SpawnRequest {

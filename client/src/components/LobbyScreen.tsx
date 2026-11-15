@@ -189,6 +189,66 @@ export function LobbyScreen({
         </div>
 
         <div className="settings-grid">
+          {/* Imagery Provider */}
+          <div className="field">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <label>Street View Provider</label>
+              {room.settings.imageryProvider === 'google' && !serverInfo.hasGoogleKey && isHost ? (
+                <button
+                  type="button"
+                  className="pill-btn"
+                  style={{ fontSize: '0.75rem', color: '#f59e0b', borderColor: '#f59e0b' }}
+                  onClick={onOpenTokenDialog}
+                >
+                  <KeyRound size={12} style={{ verticalAlign: 'middle', marginInlineEnd: '0.25rem' }} />
+                  Setup Google Key
+                </button>
+              ) : null}
+            </div>
+            <div className="preset-row">
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.imageryProvider === 'mapillary'}
+                disabled={!isHost}
+                onClick={() =>
+                  void onUpdateSettings({ imageryProvider: 'mapillary' })
+                }
+              >
+                🟢 Mapillary (Free 360°)
+              </button>
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.imageryProvider === 'kartaview'}
+                disabled={!isHost}
+                onClick={() =>
+                  void onUpdateSettings({ imageryProvider: 'kartaview' })
+                }
+              >
+                🚙 KartaView (OpenStreetMap · Free)
+              </button>
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.imageryProvider === 'google'}
+                disabled={!isHost}
+                onClick={() =>
+                  void onUpdateSettings({ imageryProvider: 'google' })
+                }
+              >
+                🔑 Google Street View (BYO Key)
+              </button>
+            </div>
+            <p className="field-hint" style={{ marginBlockStart: '0.3rem' }}>
+              {room.settings.imageryProvider === 'kartaview'
+                ? 'KartaView uses community road imagery from OpenStreetMap. Zero API keys or tokens required!'
+                : room.settings.imageryProvider === 'google'
+                  ? 'Authentic 360° Google Street View with road labels hidden to prevent cheating (host API key required).'
+                  : 'Mapillary provides free high-res 360° panoramas worldwide.'}
+            </p>
+          </div>
+
           {/* Game Mode */}
           <div className="field">
             <label>Game Mode</label>

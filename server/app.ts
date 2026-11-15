@@ -8,11 +8,14 @@ import type {
   ServerToClientEvents,
 } from '../shared/types.js';
 import {
+  getGoogleKey,
   getLanUrls,
   getMapillaryToken,
   isLoopbackRequest,
+  setGoogleKey,
   setMapillaryToken,
   tunnelManager,
+  validateGoogleKey,
   validateMapillaryToken,
 } from './config.js';
 import { geoCatalog } from './geoCatalog.js';
@@ -46,6 +49,7 @@ export function createVagabondServer(options: AppInstanceOptions = {}) {
     const provider = tunnelManager.getProvider();
     res.json({
       hasToken: Boolean(getMapillaryToken()),
+      hasGoogleKey: Boolean(getGoogleKey()),
       isLocalHost: isLocal,
       port: publicPort,
       lanUrls: isLocal ? getLanUrls(publicPort) : [],
@@ -53,6 +57,37 @@ export function createVagabondServer(options: AppInstanceOptions = {}) {
       tunnelAvailable: isLocal ? provider !== null : false,
       tunnelProvider: isLocal ? provider : null,
     });
+  });
+
+  app.post('/api/config/google-key', async (req, res) => {
+    if (!isLoopbackRequest(req)) {
+      res.status(403).json({
+        ok: false,
+        error:
+          'Only the host machine (localhost) can configure the Google Maps API key.',
+      });
+      return;
+    }
+
+    const rawKey =
+      typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+    if (!rawKey) {
+      setGoogleKey('');
+      res.json({ ok: true, hasGoogleKey: false });
+      return;
+    }
+
+    const check = await validateGoogleKey(rawKey);
+    if (!check.valid) {
+      res.status(400).json({
+        ok: false,
+        error: check.error ?? 'Invalid Google Maps API key.',
+      });
+      return;
+    }
+
+    setGoogleKey(rawKey);
+    res.json({ ok: true, hasGoogleKey: true });
   });
 
   app.post('/api/config/token', async (req, res) => {

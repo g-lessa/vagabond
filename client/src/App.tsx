@@ -100,7 +100,9 @@ export function App() {
                 onClick={() => setTokenDialogOpen(true)}
               >
                 <KeyRound size={15} aria-hidden="true" />
-                {serverInfo.hasToken ? 'Mapillary Token ✓' : 'Set Mapillary Token'}
+                {serverInfo.hasToken || serverInfo.hasGoogleKey
+                  ? 'API Keys ✓'
+                  : 'Configure API Keys'}
               </button>
             ) : null}
 
@@ -154,31 +156,33 @@ export function App() {
           onOpenTokenDialog={() => setTokenDialogOpen(true)}
           onRefreshServerInfo={refreshServerInfo}
         />
-      ) : roomState.phase === 'playing' && mapillaryToken ? (
-        <GamePlayScreen
-          room={roomState}
-          playerId={playerId}
-          mapillaryToken={mapillaryToken}
-          shortenedNotice={shortenedNotice}
-          floatingEmojis={floatingEmojis}
-          sabotagedUntil={sabotagedUntil}
-          sabotageBy={sabotageBy}
-          powerUpNotice={powerUpNotice}
-          muted={muted}
-          onToggleMute={handleToggleMute}
-          onSendEmoji={sendEmoji}
-          onUsePowerUp={usePowerUp}
-          onDraftPin={sendDraftPin}
-          onSubmitGuess={submitGuess}
-        />
-      ) : roomState.phase === 'playing' && !mapillaryToken ? (
-        <main className="landing-main">
-          <div className="alert alert--error" role="alert">
-            <span>
-              Waiting for host&apos;s Mapillary token configuration to load street imagery…
-            </span>
-          </div>
-        </main>
+      ) : roomState.phase === 'playing' ? (
+        (roomState.currentRound?.imageryProvider ?? roomState.settings.imageryProvider) === 'mapillary' && !mapillaryToken ? (
+          <main className="landing-main">
+            <div className="alert alert--error" role="alert">
+              <span>
+                Waiting for host&apos;s Mapillary token configuration to load street imagery…
+              </span>
+            </div>
+          </main>
+        ) : (
+          <GamePlayScreen
+            room={roomState}
+            playerId={playerId}
+            mapillaryToken={mapillaryToken ?? ''}
+            shortenedNotice={shortenedNotice}
+            floatingEmojis={floatingEmojis}
+            sabotagedUntil={sabotagedUntil}
+            sabotageBy={sabotageBy}
+            powerUpNotice={powerUpNotice}
+            muted={muted}
+            onToggleMute={handleToggleMute}
+            onSendEmoji={sendEmoji}
+            onUsePowerUp={usePowerUp}
+            onDraftPin={sendDraftPin}
+            onSubmitGuess={submitGuess}
+          />
+        )
       ) : roomState.phase === 'round_result' ? (
         <RoundResultScreen
           room={roomState}
@@ -199,6 +203,7 @@ export function App() {
         open={tokenDialogOpen}
         onClose={() => setTokenDialogOpen(false)}
         hasExistingToken={serverInfo.hasToken}
+        hasExistingGoogleKey={serverInfo.hasGoogleKey}
         onSaved={() => void refreshServerInfo()}
       />
     </div>
