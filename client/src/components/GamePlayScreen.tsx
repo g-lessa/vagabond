@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Camera,
   CheckCircle2,
   Clock,
   Heart,
@@ -21,12 +22,14 @@ import type {
 } from '@shared/types';
 import type { ShortenedNotice } from '../hooks/useSocket';
 import {
+  playCameraShutterSound,
   playEmojiPopSound,
   playGuessLockedSound,
   playMudSplatSound,
   playPowerUpSound,
   playTimerUrgentTick,
 } from '../lib/sound';
+import { startBiomeSoundscape, stopBiomeSoundscape } from '../lib/biomeAudio';
 import { StreetViewer } from './StreetViewer';
 import { GuessMinimap } from './GuessMinimap';
 import { ModalDialog } from './ModalDialog';
@@ -63,10 +66,82 @@ interface GamePlayScreenProps {
     lat: number,
     lng: number,
   ) => Promise<{ ok: boolean; error?: string }>;
+  onSubmitSnap?: (
+    dataUrl: string,
+  ) => Promise<{ ok: boolean; error?: string; bonusPoints?: number; bonusHp?: number }>;
   onReturnToLobby?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 const EMOJI_OPTIONS = ['😱', '📍', '🤡', '🚀', '💀', '🎉', '🔥', '❤️'];
+
+function captureSnapshot(targetTitle: string, compassAngle: number, countryName?: string): string {
+  try {
+    const canvases = Array.from(document.querySelectorAll('canvas'));
+    let bestCanvas: HTMLCanvasElement | null = null;
+    let maxArea = 0;
+    for (const c of canvases) {
+      const area = c.width * c.height;
+      if (area > maxArea && !c.classList.contains('leaflet-tile')) {
+        maxArea = area;
+        bestCanvas = c;
+      }
+    }
+
+    if (bestCanvas && maxArea > 1000) {
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = 640;
+      exportCanvas.height = 480;
+      const ctx = exportCanvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(bestCanvas, 0, 0, 640, 480);
+        const grad = ctx.createRadialGradient(320, 240, 160, 320, 240, 380);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.4)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 640, 480);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(`VAGABOND SNAP • ${new Date().toISOString().slice(0, 10)}`, 16, 460);
+        return exportCanvas.toDataURL('image/jpeg', 0.85);
+      }
+    }
+  } catch (err) {
+    console.warn('Canvas capture fallback:', err);
+  }
+
+  const fallback = document.createElement('canvas');
+  fallback.width = 640;
+  fallback.height = 480;
+  const ctx = fallback.getContext('2d');
+  if (ctx) {
+    const bgGrad = ctx.createLinearGradient(0, 0, 640, 480);
+    bgGrad.addColorStop(0, '#0f172a');
+    bgGrad.addColorStop(0.5, '#1e293b');
+    bgGrad.addColorStop(1, '#0284c7');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 640, 480);
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(`📸 ${targetTitle}`, 36, 180);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(countryName ? `Explored in ${countryName}` : 'Scavenger Snapshot Captured', 36, 220);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '14px monospace';
+    ctx.fillText(`Heading: ${Math.round(compassAngle)}° | Verified by Vagabond`, 36, 260);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(`VAGABOND POLAROID • ${new Date().toLocaleTimeString()}`, 36, 440);
+
+    return fallback.toDataURL('image/jpeg', 0.85);
+  }
+  return '';
+}
 
 function formatClock(totalSeconds: number): string {
   const clamped = Math.max(0, Math.ceil(totalSeconds));
@@ -90,6 +165,7 @@ export function GamePlayScreen({
   onUsePowerUp,
   onDraftPin,
   onSubmitGuess,
+  onSubmitSnap,
   onReturnToLobby,
 }: GamePlayScreenProps) {
   const round = room.currentRound;
@@ -97,6 +173,7 @@ export function GamePlayScreen({
   const isEliminated = Boolean(me?.isEliminated);
   const hasGuessed = Boolean(me?.hasGuessedCurrentRound) || isEliminated;
   const isBattleRoyale = round?.gameMode === 'battle_royale';
+  const isConquest = round?.gameMode === 'conquest';
 
   const [confirmTerminateOpen, setConfirmTerminateOpen] = useState(false);
   const [terminating, setTerminating] = useState(false);
@@ -114,6 +191,10 @@ export function GamePlayScreen({
   const [activeClue, setActiveClue] = useState<string | null>(null);
   const [powerUpUsing, setPowerUpUsing] = useState<string | null>(null);
 
+  const [flashActive, setFlashActive] = useState(false);
+  const [snapped, setSnapped] = useState(false);
+  const [snapFeedback, setSnapFeedback] = useState<string | null>(null);
+
   const lastDraftSentRef = useRef(0);
   const lastTickSecondRef = useRef<number | null>(null);
   const lastEmojiCountRef = useRef(floatingEmojis.length);
@@ -121,6 +202,19 @@ export function GamePlayScreen({
   const roundKey = round
     ? `${room.code}_${round.roundNumber}_${round.imageId}`
     : 'none';
+
+  // Procedural Biome Soundscape (Web Audio API)
+  useEffect(() => {
+    const isAmbientEnabled = room.settings.enableAmbientAudio;
+    if (isAmbientEnabled && round?.biome && !muted) {
+      startBiomeSoundscape(round.biome, false);
+    } else {
+      stopBiomeSoundscape();
+    }
+    return () => {
+      stopBiomeSoundscape();
+    };
+  }, [round?.biome, roundKey, muted, room.settings.enableAmbientAudio]);
 
   // Sound on new floating emoji
   useEffect(() => {
@@ -137,7 +231,7 @@ export function GamePlayScreen({
     }
   }, [sabotagedUntil, muted]);
 
-  // Reset round-specific power-up state
+  // Reset round-specific power-up and snap state
   useEffect(() => {
     setPin(null);
     setResetSignal(0);
@@ -146,6 +240,9 @@ export function GamePlayScreen({
     setOpponentPins([]);
     setActiveClue(null);
     lastTickSecondRef.current = null;
+    setSnapped(false);
+    setSnapFeedback(null);
+    setFlashActive(false);
   }, [roundKey]);
 
   // Smooth countdown timer tick
@@ -201,6 +298,27 @@ export function GamePlayScreen({
     }
   }, [pin, hasGuessed, submitting, isEliminated, onSubmitGuess, muted]);
 
+  const handleSnap = useCallback(async () => {
+    if (snapped || !round?.scavengerTarget || isEliminated) return;
+    playCameraShutterSound(muted);
+    setFlashActive(true);
+    setTimeout(() => setFlashActive(false), 450);
+
+    const dataUrl = captureSnapshot(
+      round.scavengerTarget.title,
+      bearing,
+      round.mapName,
+    );
+
+    setSnapped(true);
+    setSnapFeedback(`📸 Captured ${round.scavengerTarget.title}!`);
+    setTimeout(() => setSnapFeedback(null), 4000);
+
+    if (onSubmitSnap && dataUrl) {
+      await onSubmitSnap(dataUrl);
+    }
+  }, [snapped, round?.scavengerTarget, round?.mapName, isEliminated, bearing, muted, onSubmitSnap]);
+
   // Handle Power-Up usage
   const handleTriggerPowerUp = async (id: PowerUpId) => {
     if (powerUpUsing || !me || (me.powerUps[id] ?? 0) <= 0) return;
@@ -241,11 +359,13 @@ export function GamePlayScreen({
         void handleSubmit();
       } else if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) {
         setResetSignal((n) => n + 1);
+      } else if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) {
+        void handleSnap();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pin, hasGuessed, handleSubmit]);
+  }, [pin, hasGuessed, handleSubmit, handleSnap]);
 
   if (!round) return null;
 
@@ -266,6 +386,8 @@ export function GamePlayScreen({
 
   return (
     <main className="play-viewport" aria-label="Street Explorer gameplay">
+      {flashActive ? <div className="camera-flash-overlay" aria-hidden="true" /> : null}
+
       <h1 className="visually-hidden">
         Round {round.roundNumber} of {round.totalRounds} — {round.mapName}
       </h1>
@@ -388,6 +510,43 @@ export function GamePlayScreen({
                 />
               </div>
             </div>
+          ) : isConquest ? (
+            <div style={{ minWidth: '130px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                  🏰 Territories
+                </span>
+                <span className="tabular-nums" style={{ color: '#d8b4fe' }}>
+                  {me?.territoriesCount ?? 0} / {room.settings.targetTerritories ?? 5}
+                </span>
+              </div>
+              <div
+                style={{
+                  width: '100%',
+                  height: '6px',
+                  background: 'rgba(255,255,255,0.15)',
+                  borderRadius: '999px',
+                  overflow: 'hidden',
+                  marginTop: '0.2rem',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(100, Math.round(((me?.territoriesCount ?? 0) / (room.settings.targetTerritories ?? 5)) * 100))}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #a855f7, #6366f1)',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+            </div>
           ) : (
             <div>
               <div
@@ -468,6 +627,16 @@ export function GamePlayScreen({
                   >
                     {p.isEliminated ? '💀' : `${p.hp}`}
                   </span>
+                ) : isConquest ? (
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      color: '#d8b4fe',
+                    }}
+                  >
+                    🏰 {p.territoriesCount ?? 0}
+                  </span>
                 ) : null}
                 {p.hasGuessedCurrentRound ? (
                   <CheckCircle2
@@ -545,6 +714,17 @@ export function GamePlayScreen({
         </div>
       ) : null}
 
+      {snapFeedback ? (
+        <div
+          className="powerup-announcement"
+          role="status"
+          style={{ borderColor: 'rgba(245, 158, 11, 0.6)', color: '#fbbf24' }}
+        >
+          <Camera size={16} aria-hidden="true" />
+          <span>{snapFeedback}</span>
+        </div>
+      ) : null}
+
       {activeClue ? (
         <div className="clue-popup" role="status">
           <span style={{ fontWeight: 800 }}>🧭 INTEL:</span> {activeClue}
@@ -580,6 +760,46 @@ export function GamePlayScreen({
             <span className="compass-needle" />
           </div>
         </div>
+
+        {/* Photo Scavenger Hunt Objective & Shutter Button */}
+        {round.scavengerTarget ? (
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.45rem',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div
+              className="scavenger-hud-pill"
+              title={round.scavengerTarget.description}
+            >
+              <span>{round.scavengerTarget.emoji}</span>
+              <span>
+                <strong>Objective:</strong> {round.scavengerTarget.title}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: '#fde68a' }}>
+                (+{round.scavengerTarget.bonusPoints} pts)
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="btn-snap-camera"
+              onClick={() => void handleSnap()}
+              disabled={snapped || isEliminated}
+              title={
+                snapped
+                  ? 'Photo captured for this round!'
+                  : `Capture photo of ${round.scavengerTarget.title} (Key: C)`
+              }
+            >
+              <Camera size={14} aria-hidden="true" />
+              <span>{snapped ? '✓ Photo Snapped' : 'Snap Photo (C)'}</span>
+            </button>
+          </div>
+        ) : null}
 
         <div
           style={{

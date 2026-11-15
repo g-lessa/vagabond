@@ -239,6 +239,11 @@ export function createVagabondServer(options: AppInstanceOptions = {}) {
       ack?.(res);
     });
 
+    socket.on('round:submitSnap', ({ roomCode, dataUrl }, ack) => {
+      const res = manager.submitSnap(socket.id, roomCode, dataUrl);
+      ack?.(res);
+    });
+
     socket.on('round:next', async ({ roomCode }, ack) => {
       const res = await manager.nextRound(socket.id, roomCode);
       ack?.(res);

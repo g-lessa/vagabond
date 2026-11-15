@@ -38,6 +38,7 @@ export function App() {
     startGame,
     sendDraftPin,
     submitGuess,
+    submitSnap,
     nextRound,
     playAgain,
     terminateGame,
@@ -180,6 +181,7 @@ export function App() {
             onUsePowerUp={usePowerUp}
             onDraftPin={sendDraftPin}
             onSubmitGuess={submitGuess}
+            onSubmitSnap={submitSnap}
             onReturnToLobby={terminateGame}
           />
         )

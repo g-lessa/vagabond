@@ -27,12 +27,19 @@ export function GameOverScreen({
   const me = room.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
   const isBattleRoyale = room.settings.gameMode === 'battle_royale';
+  const isConquest = room.settings.gameMode === 'conquest';
   const [selectedRound, setSelectedRound] = useState<number | 'all'>('all');
   const [resetting, setResetting] = useState(false);
   const [copiedSummary, setCopiedSummary] = useState(false);
 
   const standings = useMemo(() => {
     return [...room.players].sort((a, b) => {
+      if (isConquest) {
+        return (
+          (b.territoriesCount ?? 0) - (a.territoriesCount ?? 0) ||
+          b.totalScore - a.totalScore
+        );
+      }
       if (isBattleRoyale) {
         return (
           b.hp - a.hp ||
@@ -41,7 +48,7 @@ export function GameOverScreen({
       }
       return b.totalScore - a.totalScore;
     });
-  }, [room.players, isBattleRoyale]);
+  }, [room.players, isBattleRoyale, isConquest]);
 
   const mapRounds = useMemo(() => {
     if (selectedRound === 'all') return room.roundHistory;
@@ -94,8 +101,10 @@ export function GameOverScreen({
       list.push({
         id: 'champion',
         emoji: '👑',
-        title: 'Grand Champion',
-        desc: '#1 podium finish in this match!',
+        title: isConquest ? 'World Conqueror' : 'Grand Champion',
+        desc: isConquest
+          ? 'Conquered the highest number of world territories!'
+          : '#1 podium finish in this match!',
       });
     }
     if (isBattleRoyale && !me?.isEliminated) {
@@ -104,6 +113,25 @@ export function GameOverScreen({
         emoji: '💀',
         title: 'Apex Survivor',
         desc: 'Survived the Battle Royale knockout mode!',
+      });
+    }
+    if ((me?.territoriesCount ?? 0) >= 1) {
+      list.push({
+        id: 'conqueror',
+        emoji: '🏰',
+        title: 'Territory Warlord',
+        desc: `Conquered ${me?.territoriesCount} global territories!`,
+      });
+    }
+    const hasSnappedPhoto = room.roundHistory.some((r) =>
+      r.guesses.some((g) => g.playerId === playerId && g.hasSnap),
+    );
+    if (hasSnappedPhoto) {
+      list.push({
+        id: 'photographer',
+        emoji: '📸',
+        title: 'Photo Snapper',
+        desc: 'Completed in-game Photo Scavenger Hunt objectives on the road.',
       });
     }
     const fastestGuessMs = Math.min(
@@ -118,7 +146,7 @@ export function GameOverScreen({
       });
     }
     return list;
-  }, [myGuesses, visitedCountries, standings, playerId, isBattleRoyale, me]);
+  }, [myGuesses, visitedCountries, standings, playerId, isBattleRoyale, isConquest, me, room.roundHistory]);
 
   async function handlePlayAgain() {
     setResetting(true);
@@ -133,7 +161,7 @@ export function GameOverScreen({
     const winner = standings[0];
     const text = [
       `🧭 Vagabond Travel Boarding Pass (Room ${room.code})`,
-      `🏆 Winner: ${winner?.name ?? 'Traveler'} (${isBattleRoyale ? `${winner?.hp.toLocaleString()} HP remaining` : `${winner?.totalScore.toLocaleString()} pts`})`,
+      `🏆 Winner: ${winner?.name ?? 'Traveler'} (${isConquest ? `${winner?.territoriesCount ?? 0} territories conquered` : isBattleRoyale ? `${winner?.hp.toLocaleString()} HP remaining` : `${winner?.totalScore.toLocaleString()} pts`})`,
       `✈️ Route: ${visitedCountries.join(' ➔ ')}`,
       `📏 Total Travel: ${formatDistance(myTotalDistanceMeters)}`,
       stamps.length > 0
@@ -163,7 +191,12 @@ export function GameOverScreen({
         <div className="results-header-bar">
           <div>
             <div className="field-hint">
-              Match Complete · {room.settings.roundsCount} Rounds · {isBattleRoyale ? 'Battle Royale' : 'Classic Mode'}
+              Match Complete · {room.settings.roundsCount} Rounds ·{' '}
+              {isBattleRoyale
+                ? 'Battle Royale'
+                : isConquest
+                  ? 'World Conquest'
+                  : 'Classic Mode'}
             </div>
             <h1
               id="final-standings-heading"
@@ -245,11 +278,13 @@ export function GameOverScreen({
             <div className="boarding-pass-item">
               <span className="boarding-pass-label">FINAL OUTCOME</span>
               <span className="boarding-pass-val tabular-nums" style={{ color: 'var(--accent-primary)' }}>
-                {isBattleRoyale
-                  ? me?.isEliminated
-                    ? '💀 Eliminated'
-                    : `${(me?.hp ?? 0).toLocaleString()} HP Left`
-                  : `${(me?.totalScore ?? 0).toLocaleString()} pts`}
+                {isConquest
+                  ? `🏰 ${me?.territoriesCount ?? 0} Territories Conquered`
+                  : isBattleRoyale
+                    ? me?.isEliminated
+                      ? '💀 Eliminated'
+                      : `${(me?.hp ?? 0).toLocaleString()} HP Left`
+                    : `${(me?.totalScore ?? 0).toLocaleString()} pts`}
               </span>
             </div>
           </div>
@@ -307,7 +342,14 @@ export function GameOverScreen({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className="badge">
                   <Award size={13} aria-hidden="true" />
-                  #{idx + 1} {idx === 0 ? (isBattleRoyale ? 'Survivor' : 'Winner') : 'Place'}
+                  #{idx + 1}{' '}
+                  {idx === 0
+                    ? isConquest
+                      ? 'Conqueror'
+                      : isBattleRoyale
+                        ? 'Survivor'
+                        : 'Winner'
+                    : 'Place'}
                 </span>
                 <span
                   className="player-avatar"
@@ -321,7 +363,14 @@ export function GameOverScreen({
                 {p.name}
                 {p.id === playerId ? ' (You)' : ''}
               </div>
-              {isBattleRoyale ? (
+              {isConquest ? (
+                <div className="tabular-nums" style={{ fontSize: '1.25rem', fontWeight: 900, color: '#d8b4fe' }}>
+                  🏰 {p.territoriesCount ?? 0} Territories
+                  <div className="field-hint" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {p.totalScore.toLocaleString()} score points
+                  </div>
+                </div>
+              ) : isBattleRoyale ? (
                 <div className="tabular-nums" style={{ fontSize: '1.2rem', fontWeight: 900, color: p.isEliminated ? '#ef4444' : '#10b981' }}>
                   {p.isEliminated ? '💀 Eliminated' : `${p.hp.toLocaleString()} HP`}
                   <div className="field-hint" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
@@ -353,6 +402,7 @@ export function GameOverScreen({
               <tr>
                 <th scope="col">Rank</th>
                 <th scope="col">Player</th>
+                {isConquest ? <th scope="col">Territories</th> : null}
                 {room.roundHistory.map((r) => (
                   <th key={r.roundNumber} scope="col">
                     R{r.roundNumber}
@@ -371,6 +421,13 @@ export function GameOverScreen({
                     {p.name}
                     {p.id === playerId ? ' (You)' : ''}
                   </th>
+                  {isConquest ? (
+                    <td data-label="Territories" className="tabular-nums">
+                      <span className="conquest-pill">
+                        🏰 {p.territoriesCount ?? 0}
+                      </span>
+                    </td>
+                  ) : null}
                   {room.roundHistory.map((r) => {
                     const g = r.guesses.find((x) => x.playerId === p.id);
                     return (

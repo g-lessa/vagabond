@@ -306,6 +306,24 @@ export function useVagabondClient() {
     [roomState],
   );
 
+  const submitSnap = useCallback(
+    (dataUrl: string): Promise<{ ok: boolean; error?: string; bonusPoints?: number; bonusHp?: number }> => {
+      return new Promise((resolve) => {
+        const sock = socketRef.current;
+        if (!sock || !roomState) {
+          resolve({ ok: false, error: 'Not in a room.' });
+          return;
+        }
+        sock.emit(
+          'round:submitSnap',
+          { roomCode: roomState.code, dataUrl },
+          (res) => resolve(res ? { ok: res.ok, error: res.error, ...res.data } : { ok: true }),
+        );
+      });
+    },
+    [roomState],
+  );
+
   const nextRound = useCallback((): Promise<{ ok: boolean; error?: string }> => {
     return new Promise((resolve) => {
       const sock = socketRef.current;
@@ -428,6 +446,7 @@ export function useVagabondClient() {
     startGame,
     sendDraftPin,
     submitGuess,
+    submitSnap,
     nextRound,
     playAgain,
     terminateGame,

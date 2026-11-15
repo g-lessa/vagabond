@@ -60,8 +60,8 @@ export function KartaViewViewer({
     setError(null);
 
     const gl =
-      (canvas.getContext('webgl2', { alpha: false, antialias: true }) as WebGLRenderingContext | null) ||
-      (canvas.getContext('webgl', { alpha: false, antialias: true }) as WebGLRenderingContext | null);
+      (canvas.getContext('webgl2', { alpha: false, antialias: true, preserveDrawingBuffer: true }) as WebGLRenderingContext | null) ||
+      (canvas.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: true }) as WebGLRenderingContext | null);
 
     if (!gl) {
       setError('WebGL is not supported in this browser.');

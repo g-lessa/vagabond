@@ -13,6 +13,7 @@ import {
   playDamageHitSound,
   playEliminatedSound,
   playRoundEndChime,
+  playTerritoryCapturedSound,
 } from '../lib/sound';
 import { ResultsMap } from './ResultsMap';
 
@@ -35,6 +36,8 @@ export function RoundResultScreen({
   const me = room.players.find((p) => p.id === playerId);
   const isHost = Boolean(me?.isHost);
   const isBattleRoyale = room.settings.gameMode === 'battle_royale';
+  const isConquest = room.settings.gameMode === 'conquest';
+  const targetTerritories = room.settings.targetTerritories || 5;
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const [terminating, setTerminating] = useState(false);
@@ -42,7 +45,9 @@ export function RoundResultScreen({
   useEffect(() => {
     if (result) {
       const myGuess = result.guesses.find((g) => g.playerId === playerId);
-      if (isBattleRoyale && myGuess?.isEliminated) {
+      if (result.conquestEvent) {
+        playTerritoryCapturedSound(muted);
+      } else if (isBattleRoyale && myGuess?.isEliminated) {
         playEliminatedSound(muted);
       } else if (isBattleRoyale && (myGuess?.damageTaken ?? 0) > 0) {
         playDamageHitSound(muted);
@@ -60,8 +65,11 @@ export function RoundResultScreen({
   const alivePlayers = connectedPlayers.filter((p) => !p.isEliminated);
   const isBrDecided =
     isBattleRoyale && connectedPlayers.length > 1 && alivePlayers.length <= 1;
+  const conquestWinner = isConquest
+    ? room.players.find((p) => p.territoriesCount >= targetTerritories)
+    : null;
   const isFinalRound =
-    result.roundNumber >= result.totalRounds || isBrDecided;
+    result.roundNumber >= result.totalRounds || isBrDecided || Boolean(conquestWinner);
   const mapillaryExternalUrl = `https://www.mapillary.com/app/?pKey=${encodeURIComponent(
     result.actual.imageId,
   )}&focus=photo`;
@@ -177,6 +185,32 @@ export function RoundResultScreen({
           </div>
         </div>
 
+        {result.conquestEvent ? (
+          <div className="conquest-event-banner" role="status">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <span style={{ fontSize: '1.6rem' }}>
+                {result.conquestEvent.isStolen ? '⚔️' : '🏰'}
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>
+                  <span style={{ color: result.conquestEvent.winnerColor }}>
+                    {result.conquestEvent.winnerName}
+                  </span>{' '}
+                  {result.conquestEvent.isStolen
+                    ? `invaded and captured ${result.conquestEvent.territoryName} from ${result.conquestEvent.previousOwnerName}!`
+                    : `conquered ${result.conquestEvent.territoryName}!`}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Closest guesser claims territorial dominance in World Conquest.
+                </div>
+              </div>
+            </div>
+            <span className="conquest-pill">
+              Territory Conquered ✓
+            </span>
+          </div>
+        ) : null}
+
         <div
           tabIndex={0}
           role="region"
@@ -185,7 +219,12 @@ export function RoundResultScreen({
         >
           <table className="results-table">
             <caption id="round-standings-caption">
-              Round {result.roundNumber} Standings {isBattleRoyale ? '— Battle Royale' : ''}
+              Round {result.roundNumber} Standings{' '}
+              {isBattleRoyale
+                ? '— Battle Royale'
+                : isConquest
+                  ? '— World Conquest'
+                  : ''}
             </caption>
             <thead>
               <tr>
@@ -197,6 +236,11 @@ export function RoundResultScreen({
                   <>
                     <th scope="col">Damage</th>
                     <th scope="col">Remaining HP</th>
+                  </>
+                ) : isConquest ? (
+                  <>
+                    <th scope="col">Territories</th>
+                    <th scope="col">Total Score</th>
                   </>
                 ) : (
                   <th scope="col">Total Score</th>
@@ -211,6 +255,8 @@ export function RoundResultScreen({
                   0,
                   Math.min(100, Math.round(((g.remainingHp ?? 0) / startingHp) * 100)),
                 );
+                const playerTerritories =
+                  room.players.find((p) => p.id === g.playerId)?.territoriesCount ?? 0;
                 return (
                   <tr
                     key={g.playerId}
@@ -252,6 +298,21 @@ export function RoundResultScreen({
                         <span className="score-bar-fill" />
                       </span>
                       <strong>+{g.score.toLocaleString('en-US')}</strong>
+                      {g.hasSnap && g.snapBonus ? (
+                        <span
+                          className="badge"
+                          style={{
+                            marginInlineStart: '0.45rem',
+                            fontSize: '0.72rem',
+                            background: 'rgba(245, 158, 11, 0.2)',
+                            color: '#fbbf24',
+                            borderColor: 'rgba(245, 158, 11, 0.4)',
+                          }}
+                          title="Photo Scavenger Snap Bonus"
+                        >
+                          📸 +{g.snapBonus}
+                        </span>
+                      ) : null}
                     </td>
 
                     {isBattleRoyale ? (
@@ -287,6 +348,17 @@ export function RoundResultScreen({
                           </div>
                         </td>
                       </>
+                    ) : isConquest ? (
+                      <>
+                        <td data-label="Territories" className="tabular-nums">
+                          <span className="conquest-pill">
+                            🏰 {playerTerritories} / {targetTerritories}
+                          </span>
+                        </td>
+                        <td data-label="Total Score" className="tabular-nums">
+                          <strong>{g.totalScore.toLocaleString('en-US')}</strong>
+                        </td>
+                      </>
                     ) : (
                       <td data-label="Total Score" className="tabular-nums">
                         <strong>{g.totalScore.toLocaleString('en-US')}</strong>
@@ -298,6 +370,65 @@ export function RoundResultScreen({
             </tbody>
           </table>
         </div>
+
+        {/* Photo Scavenger Polaroid Gallery */}
+        {result.snaps && result.snaps.length > 0 ? (
+          <section style={{ marginBlockStart: '1.75rem' }} aria-label="Photo Scavenger Gallery">
+            <h2
+              style={{
+                fontSize: '1.15rem',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                margin: '0 0 0.35rem',
+              }}
+            >
+              <Camera size={19} style={{ color: '#f59e0b' }} aria-hidden="true" />
+              Polaroid Scavenger Snaps
+            </h2>
+            <p className="field-hint" style={{ margin: '0 0 1rem' }}>
+              Souvenir photos captured during this round by your fellow vagabonds.
+            </p>
+
+            <div className="polaroid-gallery">
+              {result.snaps.map((snap, i) => {
+                const rot = ((i % 5) - 2) * 2.2;
+                return (
+                  <div
+                    key={snap.playerId + snap.timestamp}
+                    className="polaroid-card"
+                    style={{ '--polaroid-rotate': `${rot}deg` } as React.CSSProperties}
+                  >
+                    <img
+                      src={snap.dataUrl}
+                      alt={`Photo snapped by ${snap.playerName}`}
+                      className="polaroid-photo"
+                      loading="lazy"
+                    />
+                    <div className="polaroid-caption">
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span
+                          style={{
+                            inlineSize: '9px',
+                            blockSize: '9px',
+                            borderRadius: '999px',
+                            background: snap.playerColor,
+                          }}
+                          aria-hidden="true"
+                        />
+                        <span>{snap.playerName}</span>
+                      </span>
+                      <span style={{ color: '#f59e0b', fontSize: '0.74rem' }}>
+                        📸 Snapped
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
       </section>
     </main>
   );

@@ -1,8 +1,43 @@
 export type RoomPhase = 'lobby' | 'playing' | 'round_result' | 'game_over';
 
-export type GameMode = 'classic' | 'battle_royale';
+export type GameMode = 'classic' | 'battle_royale' | 'conquest';
 
 export type ImageryProvider = 'mapillary' | 'kartaview' | 'google';
+
+export interface ScavengerTarget {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  bonusPoints: number;
+}
+
+export interface ScavengerSnap {
+  playerId: string;
+  playerName: string;
+  playerColor: string;
+  dataUrl: string;
+  timestamp: number;
+}
+
+export interface ConquestTerritory {
+  id: string;
+  name: string;
+  color: string;
+  ownerId: string;
+  ownerName: string;
+  conqueredRound: number;
+}
+
+export interface ConquestEvent {
+  territoryId: string;
+  territoryName: string;
+  winnerId: string;
+  winnerName: string;
+  winnerColor: string;
+  isStolen: boolean;
+  previousOwnerName?: string;
+}
 
 export interface CustomBounds {
   north: number;
@@ -26,6 +61,9 @@ export interface GameSettings {
   gameMode: GameMode;
   startingHp: number;
   enablePowerUps: boolean;
+  enableScavengerHunt: boolean;
+  targetTerritories: number;
+  enableAmbientAudio: boolean;
   imageryProvider: ImageryProvider;
 }
 
@@ -43,6 +81,9 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   gameMode: 'classic',
   startingHp: 10000,
   enablePowerUps: false,
+  enableScavengerHunt: true,
+  targetTerritories: 5,
+  enableAmbientAudio: true,
   imageryProvider: 'mapillary',
 };
 
@@ -61,6 +102,8 @@ export interface Player {
   maxHp: number;
   isEliminated: boolean;
   powerUps: Record<PowerUpId, number>;
+  territoriesCount: number;
+  hasSnappedCurrentRound: boolean;
 }
 
 export interface RoundBrief {
@@ -83,6 +126,8 @@ export interface RoundBrief {
   photoUrl?: string | null;
   googleApiKey?: string | null;
   googlePanoId?: string | null;
+  scavengerTarget?: ScavengerTarget | null;
+  biome?: string | null;
 }
 
 export interface PlayerGuessResult {
@@ -99,6 +144,8 @@ export interface PlayerGuessResult {
   damageTaken?: number;
   remainingHp?: number;
   isEliminated?: boolean;
+  hasSnap?: boolean;
+  snapBonus?: number;
 }
 
 export interface RoundResult {
@@ -114,6 +161,8 @@ export interface RoundResult {
   };
   mapDiagonalMeters: number;
   guesses: PlayerGuessResult[];
+  conquestEvent?: ConquestEvent | null;
+  snaps?: ScavengerSnap[];
 }
 
 export interface RoomState {
@@ -127,6 +176,7 @@ export interface RoomState {
   nextRoundReady: boolean;
   spawningStatus: string | null;
   errorMessage: string | null;
+  territories: Record<string, ConquestTerritory>;
 }
 
 export type MapCategory = 'global' | 'continent' | 'country' | 'custom' | 'themed';
@@ -188,6 +238,10 @@ export interface ClientToServerEvents {
   'round:submitGuess': (
     payload: { roomCode: string; lat: number; lng: number },
     ack?: (res: AckResult) => void,
+  ) => void;
+  'round:submitSnap': (
+    payload: { roomCode: string; dataUrl: string },
+    ack?: (res: AckResult<{ bonusPoints?: number; bonusHp?: number }>) => void,
   ) => void;
   'round:next': (
     payload: { roomCode: string },

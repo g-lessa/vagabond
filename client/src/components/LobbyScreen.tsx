@@ -273,6 +273,17 @@ export function LobbyScreen({
               >
                 ⚔️ Battle Royale (HP Knockout)
               </button>
+              <button
+                type="button"
+                className="pill-btn"
+                aria-pressed={room.settings.gameMode === 'conquest'}
+                disabled={!isHost}
+                onClick={() =>
+                  void onUpdateSettings({ gameMode: 'conquest' })
+                }
+              >
+                🏰 Conquest (World Turf War)
+              </button>
             </div>
             {room.settings.gameMode === 'battle_royale' ? (
               <div
@@ -296,6 +307,33 @@ export function LobbyScreen({
                     style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
                   >
                     {hp.toLocaleString()} HP
+                  </button>
+                ))}
+              </div>
+            ) : room.settings.gameMode === 'conquest' ? (
+              <div
+                style={{
+                  marginBlockStart: '0.45rem',
+                  display: 'flex',
+                  gap: '0.5rem',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span className="field-hint">Target Territories to Win:</span>
+                {[3, 5, 7, 10].map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    className="pill-btn"
+                    aria-pressed={room.settings.targetTerritories === count}
+                    disabled={!isHost}
+                    onClick={() =>
+                      void onUpdateSettings({ targetTerritories: count })
+                    }
+                    style={{ fontSize: '0.78rem', padding: '0.2rem 0.55rem' }}
+                  >
+                    {count} Territories
                   </button>
                 ))}
               </div>
@@ -796,6 +834,52 @@ export function LobbyScreen({
               disabled={!isHost}
               onChange={(e) =>
                 void onUpdateSettings({ only360: e.target.checked })
+              }
+            />
+          </div>
+
+          <div className="toggle-row">
+            <div>
+              <label
+                htmlFor="toggle-scavenger-hunt"
+                style={{ fontWeight: 600, display: 'block' }}
+              >
+                📸 Photo Scavenger Hunt
+              </label>
+              <span className="field-hint">
+                Active camera objectives each round (flags, fauna, road signs) with bonus points and Polaroid souvenirs!
+              </span>
+            </div>
+            <input
+              id="toggle-scavenger-hunt"
+              type="checkbox"
+              checked={room.settings.enableScavengerHunt}
+              disabled={!isHost}
+              onChange={(e) =>
+                void onUpdateSettings({ enableScavengerHunt: e.target.checked })
+              }
+            />
+          </div>
+
+          <div className="toggle-row">
+            <div>
+              <label
+                htmlFor="toggle-ambient-audio"
+                style={{ fontWeight: 600, display: 'block' }}
+              >
+                🎧 Ambient Biome Audio
+              </label>
+              <span className="field-hint">
+                Procedural audio synthesized live with Web Audio (tundra wind, ocean surf, forest birds, cicadas).
+              </span>
+            </div>
+            <input
+              id="toggle-ambient-audio"
+              type="checkbox"
+              checked={room.settings.enableAmbientAudio}
+              disabled={!isHost}
+              onChange={(e) =>
+                void onUpdateSettings({ enableAmbientAudio: e.target.checked })
               }
             />
           </div>

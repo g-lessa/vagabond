@@ -4,6 +4,8 @@ import {
   DEFAULT_GAME_SETTINGS,
   type AckResult,
   type ClientToServerEvents,
+  type ConquestEvent,
+  type ConquestTerritory,
   type CustomBounds,
   type FloatingEmoji,
   type GameSettings,
@@ -13,12 +15,19 @@ import {
   type RoomState,
   type RoundBrief,
   type RoundResult,
+  type ScavengerSnap,
+  type ScavengerTarget,
   type ServerToClientEvents,
 } from '../shared/types.js';
 import {
   calculateGeoGuessrScore,
   haversineDistanceMeters,
 } from '../shared/scoring.js';
+import {
+  detectBiome,
+  getRandomScavengerTarget,
+  getTerritoryForLocation,
+} from '../shared/scavenger.js';
 import { geoCatalog } from './geoCatalog.js';
 import { getGoogleKey, getMapillaryToken } from './config.js';
 import {
@@ -76,6 +85,8 @@ interface ActiveRoundInternal {
   draftPins: Map<string, { lat: number; lng: number }>;
   lockedGuesses: Map<string, InternalGuess>;
   timerHandle: NodeJS.Timeout | null;
+  scavengerTarget: ScavengerTarget | null;
+  biome: string | null;
 }
 
 interface RoomInternal {
@@ -98,6 +109,8 @@ interface RoomInternal {
   cleanupHandle: NodeJS.Timeout | null;
   spawningStatus: string | null;
   errorMessage: string | null;
+  territories: Map<string, ConquestTerritory>;
+  currentRoundSnaps: ScavengerSnap[];
 }
 
 export type LocationSpawnerFn = (
@@ -161,8 +174,15 @@ export class RoomManager {
     next.allowPanning = Boolean(next.allowPanning);
     next.allowZooming = Boolean(next.allowZooming);
     next.enablePowerUps = Boolean(next.enablePowerUps);
-    next.gameMode =
-      next.gameMode === 'battle_royale' ? 'battle_royale' : 'classic';
+    next.enableScavengerHunt = Boolean(next.enableScavengerHunt ?? true);
+    next.enableAmbientAudio = Boolean(next.enableAmbientAudio ?? true);
+    next.targetTerritories = Math.max(
+      2,
+      Math.min(20, Math.round(Number(next.targetTerritories) || 5)),
+    );
+    next.gameMode = ['battle_royale', 'conquest'].includes(next.gameMode)
+      ? next.gameMode
+      : 'classic';
     next.startingHp = Math.max(
       1000,
       Math.min(30000, Math.round(Number(next.startingHp) || 10000)),
@@ -205,6 +225,8 @@ export class RoomManager {
         googleApiKey:
           room.settings.imageryProvider === 'google' ? getGoogleKey() : null,
         googlePanoId: room.currentRound.location.googlePanoId ?? null,
+        scavengerTarget: room.currentRound.scavengerTarget ?? null,
+        biome: room.currentRound.biome ?? null,
       };
     }
 
@@ -221,6 +243,8 @@ export class RoomManager {
       maxHp: p.maxHp,
       isEliminated: p.isEliminated,
       powerUps: p.powerUps,
+      territoriesCount: p.territoriesCount ?? 0,
+      hasSnappedCurrentRound: Boolean(p.hasSnappedCurrentRound),
     }));
 
     return {
@@ -234,6 +258,7 @@ export class RoomManager {
       nextRoundReady: Boolean(room.prewarmedRound?.resolved),
       spawningStatus: room.spawningStatus,
       errorMessage: room.errorMessage,
+      territories: Object.fromEntries(room.territories.entries()),
     };
   }
 
@@ -280,6 +305,8 @@ export class RoomManager {
       cleanupHandle: null,
       spawningStatus: null,
       errorMessage: null,
+      territories: new Map(),
+      currentRoundSnaps: [],
     };
 
     room.players.set(playerId, {
@@ -295,6 +322,8 @@ export class RoomManager {
       maxHp: room.settings.startingHp,
       isEliminated: false,
       powerUps: createDefaultPowerUps(),
+      territoriesCount: 0,
+      hasSnappedCurrentRound: false,
       socketId,
     });
 
@@ -348,6 +377,8 @@ export class RoomManager {
         maxHp: room.settings.startingHp,
         isEliminated: false,
         powerUps: createDefaultPowerUps(),
+        territoriesCount: 0,
+        hasSnappedCurrentRound: false,
         socketId,
       });
     }
@@ -435,6 +466,8 @@ export class RoomManager {
     room.usedSequenceIds.clear();
     room.prewarmedRound = null;
     room.errorMessage = null;
+    room.territories.clear();
+    room.currentRoundSnaps = [];
 
     for (const player of room.players.values()) {
       player.totalScore = 0;
@@ -444,6 +477,8 @@ export class RoomManager {
       player.maxHp = room.settings.startingHp;
       player.isEliminated = false;
       player.powerUps = createDefaultPowerUps();
+      player.territoriesCount = 0;
+      player.hasSnappedCurrentRound = false;
     }
 
     return await this.launchRound(room, 1);
@@ -471,6 +506,7 @@ export class RoomManager {
 
     const finishedRoundNumber = room.roundHistory.length;
     const isBattleRoyale = room.settings.gameMode === 'battle_royale';
+    const isConquest = room.settings.gameMode === 'conquest';
     const connectedPlayers = Array.from(room.players.values()).filter(
       (p) => p.connected,
     );
@@ -478,7 +514,17 @@ export class RoomManager {
     const brDecided =
       isBattleRoyale && connectedPlayers.length > 1 && alivePlayers.length <= 1;
 
-    if (finishedRoundNumber >= room.settings.roundsCount || brDecided) {
+    const conquestWinner = isConquest
+      ? Array.from(room.players.values()).find(
+          (p) => p.territoriesCount >= (room.settings.targetTerritories || 5),
+        )
+      : undefined;
+
+    if (
+      finishedRoundNumber >= room.settings.roundsCount ||
+      brDecided ||
+      Boolean(conquestWinner)
+    ) {
       room.phase = 'game_over';
       room.currentRound = null;
       this.broadcastRoom(room);
@@ -507,6 +553,8 @@ export class RoomManager {
     room.prewarmedRound = null;
     room.spawningStatus = null;
     room.errorMessage = null;
+    room.territories.clear();
+    room.currentRoundSnaps = [];
     for (const player of room.players.values()) {
       player.totalScore = 0;
       player.hasGuessedCurrentRound = false;
@@ -515,6 +563,8 @@ export class RoomManager {
       player.maxHp = room.settings.startingHp;
       player.isEliminated = false;
       player.powerUps = createDefaultPowerUps();
+      player.territoriesCount = 0;
+      player.hasSnappedCurrentRound = false;
     }
     this.broadcastRoom(room);
     return { ok: true };
@@ -627,6 +677,47 @@ export class RoomManager {
       this.broadcastRoom(room);
     }
     return { ok: true };
+  }
+
+  submitSnap(
+    socketId: string,
+    roomCode: string,
+    dataUrl: string,
+  ): AckResult<{ bonusPoints?: number; bonusHp?: number }> {
+    const room = this.rooms.get(roomCode.toUpperCase());
+    if (!room || room.phase !== 'playing' || !room.currentRound) {
+      return { ok: false, error: 'No active round.' };
+    }
+    const player = this.findPlayerBySocket(room, socketId);
+    if (!player) return { ok: false, error: 'Player not found.' };
+    if (player.hasSnappedCurrentRound) {
+      return { ok: false, error: 'Already submitted a snap this round.' };
+    }
+
+    const target = room.currentRound.scavengerTarget;
+    const bonus = target?.bonusPoints ?? 350;
+
+    player.hasSnappedCurrentRound = true;
+    let bonusHp: number | undefined;
+
+    if (room.settings.gameMode === 'battle_royale') {
+      player.hp = Math.min(player.maxHp, player.hp + 1000);
+      bonusHp = 1000;
+    } else {
+      player.totalScore += bonus;
+      player.lastRoundScore = (player.lastRoundScore ?? 0) + bonus;
+    }
+
+    room.currentRoundSnaps.push({
+      playerId: player.id,
+      playerName: player.name,
+      playerColor: player.color,
+      dataUrl,
+      timestamp: Date.now(),
+    });
+
+    this.broadcastRoom(room);
+    return { ok: true, data: { bonusPoints: bonus, bonusHp } };
   }
 
   sendEmoji(socketId: string, roomCode: string, emoji: string): void {
@@ -893,7 +984,18 @@ export class RoomManager {
 
       for (const player of room.players.values()) {
         player.hasGuessedCurrentRound = false;
+        player.hasSnappedCurrentRound = false;
       }
+      room.currentRoundSnaps = [];
+
+      const scavengerTarget = room.settings.enableScavengerHunt
+        ? getRandomScavengerTarget()
+        : null;
+      const biome = detectBiome(
+        location.lat,
+        location.lng,
+        location.countryName,
+      );
 
       room.currentRound = {
         roundNumber,
@@ -906,6 +1008,8 @@ export class RoomManager {
         draftPins: new Map(),
         lockedGuesses: new Map(),
         timerHandle: null,
+        scavengerTarget,
+        biome,
       };
       room.currentRoundResult = null;
       room.phase = 'playing';
@@ -1094,6 +1198,10 @@ export class RoomManager {
         damageTaken,
         remainingHp: player.hp,
         isEliminated: player.isEliminated,
+        hasSnap: Boolean(player.hasSnappedCurrentRound),
+        snapBonus: player.hasSnappedCurrentRound
+          ? round.scavengerTarget?.bonusPoints
+          : undefined,
       });
     }
 
@@ -1111,6 +1219,49 @@ export class RoomManager {
       );
     });
 
+    // Handle Conquest Mode Territory Capture
+    let conquestEvent: ConquestEvent | null = null;
+    if (room.settings.gameMode === 'conquest') {
+      const winnerGuess = guesses.find((g) => g.distanceMeters !== null);
+      if (winnerGuess) {
+        const territory = getTerritoryForLocation(
+          round.location.lng,
+          round.location.lat,
+          round.location.countryName,
+        );
+        const existing = room.territories.get(territory.id);
+        const isStolen = Boolean(
+          existing && existing.ownerId !== winnerGuess.playerId,
+        );
+        const previousOwnerName = existing?.ownerName;
+
+        room.territories.set(territory.id, {
+          id: territory.id,
+          name: territory.name,
+          color: winnerGuess.playerColor,
+          ownerId: winnerGuess.playerId,
+          ownerName: winnerGuess.playerName,
+          conqueredRound: round.roundNumber,
+        });
+
+        for (const p of room.players.values()) {
+          p.territoriesCount = Array.from(room.territories.values()).filter(
+            (t) => t.ownerId === p.id,
+          ).length;
+        }
+
+        conquestEvent = {
+          territoryId: territory.id,
+          territoryName: territory.name,
+          winnerId: winnerGuess.playerId,
+          winnerName: winnerGuess.playerName,
+          winnerColor: winnerGuess.playerColor,
+          isStolen,
+          previousOwnerName,
+        };
+      }
+    }
+
     const result: RoundResult = {
       roundNumber: round.roundNumber,
       totalRounds: room.settings.roundsCount,
@@ -1124,6 +1275,8 @@ export class RoomManager {
       },
       mapDiagonalMeters: round.mapDiagonalMeters,
       guesses,
+      conquestEvent,
+      snaps: [...room.currentRoundSnaps],
     };
 
     room.currentRoundResult = result;

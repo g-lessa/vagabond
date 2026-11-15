@@ -93,3 +93,25 @@ export function playEmojiPopSound(muted: boolean): void {
   playTone(660, 0.08, 'sine', 0.06);
   setTimeout(() => playTone(990, 0.1, 'sine', 0.05), 40);
 }
+
+export function playCameraShutterSound(muted: boolean): void {
+  if (muted) return;
+  const ctx = getCtx();
+  if (!ctx) return;
+
+  // Mechanical click 1
+  playTone(1800, 0.02, 'square', 0.08);
+  // Shutter release
+  setTimeout(() => {
+    playTone(1200, 0.04, 'triangle', 0.07);
+    playTone(320, 0.06, 'sine', 0.09);
+  }, 35);
+}
+
+export function playTerritoryCapturedSound(muted: boolean): void {
+  if (muted) return;
+  playTone(440, 0.12, 'triangle', 0.08); // A4
+  setTimeout(() => playTone(554.37, 0.12, 'triangle', 0.08), 80); // C#5
+  setTimeout(() => playTone(659.25, 0.15, 'triangle', 0.09), 160); // E5
+  setTimeout(() => playTone(880, 0.35, 'triangle', 0.1), 260); // A5 triumph
+}

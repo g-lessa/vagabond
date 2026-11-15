@@ -1366,6 +1366,153 @@ dialog.app-dialog::backdrop {
   font-weight: 800;
 }
 
+/* ==========================================================================
+   Camera Flash, Photo Scavenger Hunt & Polaroid Styles
+   ========================================================================== */
+.camera-flash-overlay {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  z-index: 550;
+  pointer-events: none;
+  animation: flash-animation 0.45s ease-out forwards;
+}
+
+@keyframes flash-animation {
+  0% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.scavenger-hud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.btn-snap-camera {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0f172a;
+  border: none;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn-snap-camera:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.03);
+  filter: brightness(1.1);
+}
+
+.btn-snap-camera:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+.polaroid-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1.25rem;
+  margin-block-start: 1.25rem;
+}
+
+.polaroid-card {
+  background: #ffffff;
+  color: #1e293b;
+  padding: 0.75rem 0.75rem 1.1rem 0.75rem;
+  border-radius: 4px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  transform: rotate(var(--polaroid-rotate, 0deg));
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.polaroid-card:hover {
+  transform: scale(1.04) rotate(0deg);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+  z-index: 5;
+}
+
+.polaroid-photo {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #0f172a;
+  border-radius: 2px;
+}
+
+.polaroid-caption {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Conquest Turf War Styles
+   ========================================================================== */
+.conquest-event-banner {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 12px;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-start: 0.75rem;
+  animation: conquest-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes conquest-pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.conquest-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #d8b4fe;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 @media (forced-colors: active) {
   .btn,
   .card,
