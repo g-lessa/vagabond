@@ -29,7 +29,6 @@ import {
   playPowerUpSound,
   playTimerUrgentTick,
 } from '../lib/sound';
-import { startBiomeSoundscape, stopBiomeSoundscape } from '../lib/biomeAudio';
 import { StreetViewer } from './StreetViewer';
 import { GuessMinimap } from './GuessMinimap';
 import { ModalDialog } from './ModalDialog';
@@ -202,19 +201,6 @@ export function GamePlayScreen({
   const roundKey = round
     ? `${room.code}_${round.roundNumber}_${round.imageId}`
     : 'none';
-
-  // Procedural Biome Soundscape (Web Audio API)
-  useEffect(() => {
-    const isAmbientEnabled = room.settings.enableAmbientAudio;
-    if (isAmbientEnabled && round?.biome && !muted) {
-      startBiomeSoundscape(round.biome, false);
-    } else {
-      stopBiomeSoundscape();
-    }
-    return () => {
-      stopBiomeSoundscape();
-    };
-  }, [round?.biome, roundKey, muted, room.settings.enableAmbientAudio]);
 
   // Sound on new floating emoji
   useEffect(() => {

@@ -24,7 +24,6 @@ import {
   haversineDistanceMeters,
 } from '../shared/scoring.js';
 import {
-  detectBiome,
   getRandomScavengerTarget,
   getTerritoryForLocation,
 } from '../shared/scavenger.js';
@@ -86,7 +85,6 @@ interface ActiveRoundInternal {
   lockedGuesses: Map<string, InternalGuess>;
   timerHandle: NodeJS.Timeout | null;
   scavengerTarget: ScavengerTarget | null;
-  biome: string | null;
 }
 
 interface RoomInternal {
@@ -175,7 +173,6 @@ export class RoomManager {
     next.allowZooming = Boolean(next.allowZooming);
     next.enablePowerUps = Boolean(next.enablePowerUps);
     next.enableScavengerHunt = Boolean(next.enableScavengerHunt ?? true);
-    next.enableAmbientAudio = Boolean(next.enableAmbientAudio ?? true);
     next.targetTerritories = Math.max(
       2,
       Math.min(20, Math.round(Number(next.targetTerritories) || 5)),
@@ -226,7 +223,6 @@ export class RoomManager {
           room.settings.imageryProvider === 'google' ? getGoogleKey() : null,
         googlePanoId: room.currentRound.location.googlePanoId ?? null,
         scavengerTarget: room.currentRound.scavengerTarget ?? null,
-        biome: room.currentRound.biome ?? null,
       };
     }
 
@@ -991,11 +987,6 @@ export class RoomManager {
       const scavengerTarget = room.settings.enableScavengerHunt
         ? getRandomScavengerTarget()
         : null;
-      const biome = detectBiome(
-        location.lat,
-        location.lng,
-        location.countryName,
-      );
 
       room.currentRound = {
         roundNumber,
@@ -1009,7 +1000,6 @@ export class RoomManager {
         lockedGuesses: new Map(),
         timerHandle: null,
         scavengerTarget,
-        biome,
       };
       room.currentRoundResult = null;
       room.phase = 'playing';

@@ -63,7 +63,6 @@ export interface GameSettings {
   enablePowerUps: boolean;
   enableScavengerHunt: boolean;
   targetTerritories: number;
-  enableAmbientAudio: boolean;
   imageryProvider: ImageryProvider;
 }
 
@@ -83,7 +82,6 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   enablePowerUps: false,
   enableScavengerHunt: true,
   targetTerritories: 5,
-  enableAmbientAudio: true,
   imageryProvider: 'mapillary',
 };
 
@@ -127,7 +125,6 @@ export interface RoundBrief {
   googleApiKey?: string | null;
   googlePanoId?: string | null;
   scavengerTarget?: ScavengerTarget | null;
-  biome?: string | null;
 }
 
 export interface PlayerGuessResult {

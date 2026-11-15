@@ -1,36 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  detectBiome,
   getRandomScavengerTarget,
   getTerritoryForLocation,
   SCAVENGER_TARGETS,
 } from '../shared/scavenger';
 import { RoomManager } from '../server/roomManager';
-
-describe('Feature 6: Biome Detection & Soundscapes', () => {
-  it('detects tundra in extreme northern/southern latitudes', () => {
-    expect(detectBiome(68.5, 27.5, 'Finland')).toBe('tundra');
-    expect(detectBiome(71.2, -156.7, 'United States')).toBe('tundra');
-    expect(detectBiome(-54.8, -68.3, 'Argentina')).toBe('tundra');
-  });
-
-  it('detects ocean in island territories', () => {
-    expect(detectBiome(21.3, -157.8, 'Hawaii')).toBe('ocean');
-    expect(detectBiome(-20.2, 57.5, 'Mauritius')).toBe('ocean');
-  });
-
-  it('detects urban in dense metropolitan areas', () => {
-    expect(detectBiome(40.71, -74.00, 'United States')).toBe('urban');
-    expect(detectBiome(35.68, 139.76, 'Japan')).toBe('urban');
-    expect(detectBiome(51.50, -0.12, 'United Kingdom')).toBe('urban');
-  });
-
-  it('detects forest in heavily forested countries', () => {
-    expect(detectBiome(58.0, 15.0, 'Sweden')).toBe('forest');
-    expect(detectBiome(60.0, 25.0, 'Finland')).toBe('forest');
-    expect(detectBiome(-3.4, -62.2, 'Brazil')).toBe('forest');
-  });
-});
 
 describe('Feature 4: Photo Scavenger Hunt Deck', () => {
   it('has a diverse collection of scavenger targets', () => {
@@ -103,7 +77,6 @@ describe('Feature 3: World Conquest & Territories', () => {
       enablePowerUps: false,
       imageryProvider: 'mapillary',
       scavengerTarget: getRandomScavengerTarget(),
-      biome: 'urban',
       lockedGuesses: new Map(),
       draftPins: new Map(),
       snaps: [],

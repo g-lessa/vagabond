@@ -860,29 +860,6 @@ export function LobbyScreen({
               }
             />
           </div>
-
-          <div className="toggle-row">
-            <div>
-              <label
-                htmlFor="toggle-ambient-audio"
-                style={{ fontWeight: 600, display: 'block' }}
-              >
-                🎧 Ambient Biome Audio
-              </label>
-              <span className="field-hint">
-                Procedural audio synthesized live with Web Audio (tundra wind, ocean surf, forest birds, cicadas).
-              </span>
-            </div>
-            <input
-              id="toggle-ambient-audio"
-              type="checkbox"
-              checked={room.settings.enableAmbientAudio}
-              disabled={!isHost}
-              onChange={(e) =>
-                void onUpdateSettings({ enableAmbientAudio: e.target.checked })
-              }
-            />
-          </div>
         </div>
       </section>
 
